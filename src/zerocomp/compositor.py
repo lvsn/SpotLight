@@ -62,7 +62,6 @@ import subprocess
 from tempfile import TemporaryDirectory
 from typing import Literal
 from PIL import ImageDraw
-from light_estimation.light_estimator_model import ConvNextLightEstimatorModel, LightEstimatorModelWrapper, DiscretizeLightDirectionTransform
 import shutil
 import light_control.sh_light_utils
 import pickle
@@ -116,45 +115,15 @@ def recursive_info(data):
         return {"type": type(data).__name__, "value": data}
 
 
-def initialize_light_estimator(args):
-    convnext_classifier = ConvNextLightEstimatorModel(
-        bins_per_dim=args.light_estimation.bins_per_dim,
-        dims=args.light_estimation.dims,
-        backbone_name_or_path=args.light_estimation.backbone_name_or_path
-    )
-    light_estimator = LightEstimatorModelWrapper.load_from_checkpoint(
-        args.eval.light_estimation_path,
-        convnext_classifier=convnext_classifier,
-        learning_rate=args.light_estimation.learning_rate,
-        discretize_kwargs=args.light_estimation.discretize_kwargs
-    )
-    light_estimator.eval()
-    return light_estimator
-
-def load_tokenizer(args):
-    if args.tokenizer_name:
-        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name, revision=args.revision, use_fast=False)
-    elif args.pretrained_model_name_or_path:
-        tokenizer = AutoTokenizer.from_pretrained(
-            args.pretrained_model_name_or_path,
-            subfolder="tokenizer",
-            revision=args.revision,
-            use_fast=False,
-        )
-    return tokenizer
-
 def load_models(args, tokenizer):
-    text_encoder_cls = import_model_class_from_model_name_or_path(args.pretrained_model_name_or_path, args.revision)
+    text_encoder_cls = import_model_class_from_model_name_or_path(args.pretrained_model_name_or_path, None)
     text_encoder = text_encoder_cls.from_pretrained(
-        args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision
+        args.pretrained_model_name_or_path, subfolder="text_encoder", revision=None
     )
-    vae = None
-    if args.vae_type == 'normal':
-        vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision)
-    elif args.vae_type == 'asymmetric':
-        vae = AsymmetricAutoencoderKL.from_pretrained(args.vae_name_or_path)
+    
+    vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae", revision=None)
     unet = UNet2DConditionModel.from_pretrained(
-        args.pretrained_model_name_or_path, subfolder="unet", revision=args.revision
+        args.pretrained_model_name_or_path, subfolder="unet", revision=None
     )
 
     controlnet = ControlNetModel.from_pretrained(args.eval.controlnet_model_name_or_path, subfolder="controlnet",
@@ -187,9 +156,7 @@ def create_dataloader(args, to_controlnet_input, start_batch=0, shuffle=False):
         v2.CenterCrop([args.resolution, args.resolution])
     ])
     
-    if args.dataset_name == 'composite':
-        val_dataset = CompositeDataset(args.dataset_dir, transforms=val_transforms, to_controlnet_input=to_controlnet_input)
-    elif args.dataset_name == 'render':
+    if args.dataset_name == 'render':
         val_dataset = RenderDataset(args.dataset_dir, args.bg_estimates_dir, transforms=val_transforms, to_controlnet_input=to_controlnet_input, force_metallic_value=args.eval.force_metallic_value, force_roughness_value=args.eval.force_roughness_value, force_albedo_value=args.eval.force_albedo_value)
     elif args.dataset_name == 'scribbles':
         val_dataset = RenderDataset(args.dataset_dir, args.bg_estimates_dir, transforms=val_transforms, to_controlnet_input=to_controlnet_input, scribbles_dir=args.scribbles_dir, force_metallic_value=args.eval.force_metallic_value, force_roughness_value=args.eval.force_roughness_value, force_albedo_value=args.eval.force_albedo_value)
@@ -201,7 +168,7 @@ def create_dataloader(args, to_controlnet_input, start_batch=0, shuffle=False):
     val_dataloader = DataLoader(
         val_dataset,
         shuffle=shuffle,
-        batch_size=args.train_batch_size,
+        batch_size=args.batch_size,
         num_workers=args.dataloader_num_workers,
         collate_fn=collate_fn
     )
@@ -259,9 +226,6 @@ def composite_batch(batch, args, to_predictors,  EPS=1e-6, *, forced_shading_mas
     # TODO: cleaner
     if override_image_for_shading_computation is not None:
         dst_batch["controlnet_inputs"]["shading"] = compute_shading(override_image_for_shading_computation, alpha_blend(obj_batch['diffuse'], dst_batch['controlnet_inputs']['diffuse']))
-
-    if args.eval.shading_color_correction:
-        dst_batch["controlnet_inputs"]["shading"] = dst_batch["controlnet_inputs"]["shading"] * torch.tensor(args.eval.shading_color_correction, device=args.eval.device).view(1, 3, 1, 1)
 
     dst_normal = dst_batch["controlnet_inputs"]["normal"].clone()
     # ezexr.imwrite(os.path.join(f'/scratch/fredfc/{batch["name"][0]}_normal1.exr'), sdi_utils.tensor_to_numpy(dst_normal))
@@ -497,10 +461,9 @@ def composite_batch(batch, args, to_predictors,  EPS=1e-6, *, forced_shading_mas
 
 
 def run_inference(conditioning, dst_batch, pipeline, args, bg_image_for_balance, obj_mask, *, 
-                return_attention_maps=False,
                 controlnet_conditioning_scale=1.0, guess_mode=False, guidance_scale=0.0,
                 latent_mask_weight=[0.005, 0.005],
-                seed=469, # good seed according to a paper
+                seed=0, # could have used other seed, such as 469
                 num_inference_steps=20,
                 shadow_guidance_kernel_size = 16 * 2 + 1,
                 relighting_guidance=None, relighting_guidance_start_provided=False, shadow_guidances=None, shadow_composites=None, relighting_guidance_scale=0.0, relighting_guidance_mask=None,
@@ -581,7 +544,7 @@ def run_inference(conditioning, dst_batch, pipeline, args, bg_image_for_balance,
             
         out = pipeline(
             validation_prompt, conditioning, num_inference_steps=num_inference_steps, generator=generator, latents=noise_latents, guidance_scale=guidance_scale, guess_mode=guess_mode,
-            output_type='pt', class_labels=dst_batch['dominant_light_center'], return_attention_maps=return_attention_maps,
+            output_type='pt', class_labels=dst_batch['dominant_light_center'],
             callback_on_step_end=callback_on_step_end, callback_on_step_end_tensor_inputs=callback_on_step_end_tensor_inputs,
             controlnet_conditioning_scale=controlnet_conditioning_scale,
             relighting_guidance=relighting_guidance, relighting_guidance_start_provided=relighting_guidance_start_provided, relighting_guidance_scale=relighting_guidance_scale, relighting_guidance_mask=relighting_guidance_mask,
@@ -599,50 +562,6 @@ def run_inference(conditioning, dst_batch, pipeline, args, bg_image_for_balance,
 
     current_images = torch.nan_to_num(out.images, nan=0, posinf=0, neginf=0)
 
-    if args.eval.shading_color_correction:
-        current_images = current_images / torch.tensor(args.eval.shading_color_correction, device=args.eval.device).view(1, 3, 1, 1)
-
-    if args.eval.post_compositing:
-        assert not batch_3_shadow, "Batch 3 shadow is not supported with post compositing"
-        dst_bg = dst_batch["pixel_values"]
-        dst_bg = (dst_bg * 0.5 + 0.5).clamp(0, 1)
-
-        dst_mask = torch.ones_like(conditioning[:, 0:1, :, :])
-
-        dst_conditioning = torch.cat([conditioning[:, 0:4, :, :], dst_mask], dim=1)
-        if args.conditioning_channels == 14:
-            dst_conditioning = torch.cat([dst_conditioning, dst_bg], dim=1)
-        out = pipeline(
-            validation_prompt, dst_conditioning, num_inference_steps=20, generator=generator, latents=noise_latents, guidance_scale=0,
-            output_type='pt', class_labels=dst_batch['dominant_light_center'], return_attention_maps=return_attention_maps
-        )
-
-        dst_images = out.images
-        if return_attention_maps:
-            attention_maps_bg = out.attention_maps
-
-        dst_images = torch.nan_to_num(dst_images, nan=0, posinf=0, neginf=0)
-
-        comp_mask = conditioning[:, 4:5, :, :]
-
-        intensity_from_rgb = torch.tensor([0.299, 0.587, 0.114], device=args.eval.device).view(1, 3, 1, 1)
-        current_images_intensity = current_images * intensity_from_rgb
-        dst_images_intensity = dst_images * intensity_from_rgb
-        visibility = (current_images_intensity.sum(dim=1, keepdim=True) + EPS) / (dst_images_intensity.sum(dim=1, keepdim=True) + EPS)
-        visibility = visibility.clamp(0, 1)
-
-        visibility_mask = comp_mask.clamp(0, 1)
-        visibility_mask = 1 - visibility_mask
-        visibility_mask = torch.nn.functional.gaussian_blur(visibility_mask, (15, 15), 1.5)
-        visibility = visibility * visibility_mask + 1 * (1 - visibility_mask)
-
-        obj_mask_filtered = obj_mask
-
-        if args.eval.obj_color_balance:
-            current_images_balanced = current_images * sdi_utils.color_rebalance(current_images, bg_image_for_balance)
-
-        compositing = dst_bg * visibility * (1-obj_mask_filtered) + current_images_balanced * obj_mask_filtered
-    
     if output_image_logs:
         image_logs = {
             'final_latent_mask': final_latent_mask,

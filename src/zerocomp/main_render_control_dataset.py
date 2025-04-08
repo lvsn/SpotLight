@@ -113,7 +113,12 @@ def main(args):
     sdi_utils.seed_all(args.seed)
 
     # light_estimator = src.compositor.initialize_light_estimator(args)
-    tokenizer = src.compositor.load_tokenizer(args)
+    tokenizer = AutoTokenizer.from_pretrained(
+        args.pretrained_model_name_or_path,
+        subfolder="tokenizer",
+        revision=None,
+        use_fast=False,
+    )
     vae, unet, text_encoder, controlnet = src.compositor.load_models(args, tokenizer)
 
     to_controlnet_input = ToControlNetInput(
@@ -122,15 +127,9 @@ def main(args):
         tokenizer=tokenizer,
         for_sdxl=False
     )
-    # to_predictors = ToPredictors(args.eval.device,
-    #                              args.scale_destination_composite_to_minus_one_to_one,
-    #                              conditioning_channels=args.conditioning_channels,
-    #                              light_parametrization=args.light_parametrization,
-    #                              predictor_names=args.eval.predictor_names)
 # 
     to_predictors = ToPredictors(args.eval.device,
                                  args.scale_destination_composite_to_minus_one_to_one,
-                                 #conditioning_maps=['depth', 'normal', 'diffuse', 'mask', 'shading', 'roughness', 'metallic'],
                                  conditioning_maps=args.conditioning_maps,
                                  predictor_names=args.eval.predictor_names,)
 
@@ -155,7 +154,7 @@ def main(args):
         unet=unet,
         controlnet=controlnet,
         safety_checker=None,
-        revision=args.revision
+        revision=None
     )
     pipeline.scheduler = DDIMScheduler.from_config(
         pipeline.scheduler.config,
@@ -178,7 +177,7 @@ def main(args):
             unet=unet,
             controlnet=controlnet_inv,
             safety_checker=None,
-            revision=args.revision
+            revision=None
         )
         pipeline_inv.scheduler = DDIMScheduler.from_config(
             pipeline_inv.scheduler.config,
@@ -336,13 +335,6 @@ def main(args):
                     
                     auto_light_position_blender = light_control.sh_light_utils.skylibs_to_blender_xyz(auto_light_position_skylibs)
 
-                    # try:
-                    #     shadow_map_name = f"{scene_name}_light_auto"
-                    #     shadow_auto_all = src.compositor.render_numpy_shadow(scene_name, shadow_map_name, auto_light_position_blender, args.dataset_dir, results_dir, light_radius=auto_light_radius)
-                    #     shadow_auto_all = sdi_utils.numpy_to_tensor(shadow_auto_all).to(dtype=batch['mask'].dtype).to(batch['mask'].device) * (1 - batch['mask'])
-                    # except Exception as e:
-                    #     print(f"Error: {e}")
-                    #     continue
 
                     shadow_map_name = f"{scene_name}_light_auto"
                     # TODO: adjust light sphere radius per frame... render auto per frame?
@@ -364,7 +356,6 @@ def main(args):
                         args=args,
                         bg_image_for_balance=bg_image_for_balance, 
                         obj_mask=obj_mask,
-                        return_attention_maps=args.eval.return_attention_maps,
                         controlnet_conditioning_scale=args.eval.controlnet_conditioning_scale,
                         guess_mode=args.eval.guess_mode,
                     )
@@ -410,21 +401,6 @@ def main(args):
                     shadow_map_name = f"{scene_name}_light{frame_name}"
                     
                     print('rendering in blender... ')
-                    # try:
-                    #     shadow_custom = src.compositor.render_numpy_shadow(scene_name, shadow_map_name, frame_dict['blender_light_xyz_position_object_space'], args.dataset_dir, results_dir, light_radius=frame_dict['sphere_light_radius'])
-                    #     shadow_custom = sdi_utils.numpy_to_tensor(shadow_custom).to(dtype=batch['mask'].dtype).to(batch['mask'].device) * (1 - batch['mask'])
-                    # except Exception as e:
-                    #     print(f"Error: {e}")
-                    #     break
-                    if args.eval.force_zenith_deg is not None:
-                        skylibs_light_position = light_control.sh_light_utils.blender_to_skylibs_xyz(frame_dict['blender_light_xyz_position_object_space'])
-                        spherical_light_position = light_control.sh_light_utils.cartesian_to_spherical(*skylibs_light_position)
-                        azimuth, zenith = spherical_light_position
-                        new_spherical_light_position = np.array([azimuth, np.deg2rad(args.eval.force_zenith_deg)])
-                        new_light_position = light_control.sh_light_utils.spherical_to_cartesian(*new_spherical_light_position)
-                        new_light_position_blender = light_control.sh_light_utils.skylibs_to_blender_xyz(new_light_position)
-                        frame_dict['blender_light_xyz_position_object_space'] = new_light_position_blender
-                    
                     if args.dataset_name == 'real_world':
                         shadow_custom = (1 - batch['pos_shadow']) * (1 - batch['mask'])
                     elif args.dataset_name == 'scribbles':
@@ -569,7 +545,6 @@ def main(args):
                         args=args,            
                         bg_image_for_balance=bg_image_for_balance, 
                         obj_mask=obj_mask,
-                        return_attention_maps=args.eval.return_attention_maps,
                         controlnet_conditioning_scale=args.eval.controlnet_conditioning_scale,
                         guess_mode=args.eval.guess_mode,
                         # fred stuff
@@ -591,24 +566,6 @@ def main(args):
                         negative_latent_mask_np = sdi_utils.tensor_to_numpy(weighted_latent_mask[1])
                         Image.fromarray((np.repeat(positive_latent_mask_np, 3, axis=2) * 255).astype(np.uint8)).save(os.path.join(results_dir, scene_name, 'intermediate', f"positive_latent_mask_{frame_name}.png"))
                         Image.fromarray((np.repeat(negative_latent_mask_np, 3, axis=2) * 255).astype(np.uint8)).save(os.path.join(results_dir, scene_name, 'intermediate', f"negative_latent_mask_{frame_name}.png"))
-
-                    # if args.eval.sd_edit_cleanup_percentage > 0.0:
-                    #     first_step_latents = pipeline.vae.encode(pred).latent_dist.sample() * pipeline.vae.config.scaling_factor
-                    #     generator = torch.Generator(device=args.eval.device).manual_seed(args.seed)
-                    #     timestep = &
-                    #     noised_latents = pipeline.scheduler.add_noise(first_step_latents,
-                    #                                                   randn_tensor(first_step_latents.shape, generator=generator, device=first_step_latents.device, dtype=first_step_latents.dtype),
-                    #                                                   timestep)
-                    #     
-                    #     out = pipeline(
-                    #         "", conditioning_custom, num_inference_steps=20, generator=generator, latents=noise_latents, guidance_scale=guidance_scale, guess_mode=guess_mode,
-                    #         output_type='pt', class_labels=dst_batch['dominant_light_center'], return_attention_maps=return_attention_maps,
-                    #         callback_on_step_end=callback_on_step_end, callback_on_step_end_tensor_inputs=callback_on_step_end_tensor_inputs,
-                    #         controlnet_conditioning_scale=controlnet_conditioning_scale,
-                    #         relighting_guidance=relighting_guidance, relighting_guidance_start_provided=relighting_guidance_start_provided, relighting_guidance_scale=relighting_guidance_scale, relighting_guidance_mask=relighting_guidance_mask,
-                    #         relighting_guidance_rescale=args.eval.relighting_guidance_rescale,
-                    #         sd_edit_cleanup_percentage=sd_edit_cleanup_percentage,
-                    #     )
 
 
                     os.makedirs(os.path.join(results_dir, scene_name, 'default'), exist_ok=True)
@@ -679,7 +636,6 @@ def main(args):
                                 args=args, 
                                 bg_image_for_balance=bg_image_for_balance, 
                                 obj_mask=obj_mask,
-                                return_attention_maps=args.eval.return_attention_maps,
                                 guidance_scale=args.eval.guidance_scale,
                                 controlnet_conditioning_scale=args.eval.controlnet_conditioning_scale,
                                 guess_mode=args.eval.guess_mode,
@@ -709,7 +665,6 @@ def main(args):
                             args=args, 
                             bg_image_for_balance=bg_image_for_balance, 
                             obj_mask=obj_mask,
-                            return_attention_maps=args.eval.return_attention_maps,
                             guidance_scale=args.eval.guidance_scale,
                             controlnet_conditioning_scale=args.eval.controlnet_conditioning_scale,
                             guess_mode=args.eval.guess_mode,
@@ -758,7 +713,6 @@ def main(args):
                                 args=args, 
                                 bg_image_for_balance=bg_image_for_balance, 
                                 obj_mask=obj_mask,
-                                return_attention_maps=args.eval.return_attention_maps,
                                 guidance_scale=args.eval.guidance_scale,
                                 controlnet_conditioning_scale=args.eval.controlnet_conditioning_scale,
                                 guess_mode=args.eval.guess_mode,
@@ -767,44 +721,6 @@ def main(args):
                             img_relight_bg_inv_no_obj_disp = (sdi_utils.tensor_to_numpy(pred_relight_bg_inv_no_obj) * 255).astype(np.uint8)
                             img_relight_bg_inv_no_obj_disp = Image.fromarray(img_relight_bg_inv_no_obj_disp)
                             img_relight_bg_inv_no_obj_disp.save(os.path.join(results_dir, scene_name, 'relight_bg', f"inv_no_obj_{frame_name}.png"))
-
-                        if False:
-                            pred_relight_bg = src.compositor.run_inference(
-                                conditioning=conditioning_bg_new_shadow,
-                                dst_batch=dst_batch, 
-                                pipeline=pipeline, 
-                                args=args, 
-                                bg_image_for_balance=bg_image_for_balance, 
-                                obj_mask=obj_mask,
-                                return_attention_maps=args.eval.return_attention_maps,
-                                guidance_scale=args.eval.guidance_scale,
-                                controlnet_conditioning_scale=args.eval.controlnet_conditioning_scale,
-                                guess_mode=args.eval.guess_mode,
-                            )
-                            os.makedirs(os.path.join(results_dir, scene_name, 'relight_bg'), exist_ok=True)
-                            img_relight_bg_disp = (sdi_utils.tensor_to_numpy(pred_relight_bg) * 255).astype(np.uint8)
-                            img_relight_bg_disp = Image.fromarray(img_relight_bg_disp)
-                            img_relight_bg_disp.save(os.path.join(results_dir, scene_name, 'relight_bg', f"noinv_{frame_name}.png"))
-                            
-
-                        print('done relight bg')
-                    
-
-                    # image_with_light_direction = light_control.sh_light_utils.draw_light_direction_on_image(np.ones((512, 512, 3)) *0.4, list(light_position_skylibs), 0)
-                    # concat
-
-                    # variables_img = interpolator.draw_variables(frame_name)
-                    # if args.eval.relight_bg:
-                    #     img_disp = np.concatenate([pred_zerocomp, variables_img, sdi_utils.tensor_to_numpy(pred), sdi_utils.tensor_to_numpy(pred_relight_bg),
-                    #                                 variables_img], axis=1)
-                    # else:
-                    #     img_disp = np.concatenate([sdi_utils.tensor_to_numpy(batch["pixel_values"]),
-                    #         pred_zerocomp, variables_img, image_with_light_direction, sdi_utils.tensor_to_numpy(shadow_composites[0:1, ...]), sdi_utils.tensor_to_numpy(pred)], axis=1)
-                    # save
-
-                    
-                    print('done')
-                    
 
 if __name__ == "__main__":
     main()

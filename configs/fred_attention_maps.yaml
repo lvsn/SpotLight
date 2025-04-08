@@ -1,38 +1,57 @@
-defaults:
-  - fred_render_rot_light
-  - _self_
+seed: 0
+batch_size: 1
+dataloader_num_workers: 4
+resolution: 512
+dataset_name: render
 
+scale_destination_composite_to_minus_one_to_one: true
+conditioning_channels: 11
 # can't use xformers' attention because it doesn't output the intermediate attention maps
-enable_xformers_memory_efficient_attention: false
+enable_xformers_memory_efficient_attention: false # TODO: true?
+feed_empty_prompt: true
 
 conditioning_maps: ['depth', 'normal', 'diffuse', 'mask', 'shading']
-
-light_parametrization: null
-#dataset_dir: ${oc.env:SCRATCH}/shadowmap
-#dataset_dir: ${oc.env:SCRATCH}/compositing-outputs/singleimagelightpredictions_outputs/rendered_2024-09-16_10-29-12_plane
 dataset_dir: ${oc.env:SCRATCH}/control_eval/rendered_2024-10-20_19-07-58_control
 bg_estimates_dir: ${oc.env:SCRATCH}/compositing-outputs/WACV_bg_estimates
-# 32 bits
+pretrained_model_name_or_path: ${oc.env:HF_HUB_CACHE}/models--stabilityai--stable-diffusion-2-1/snapshots/5cae40e6a2745ae2b01ad92ae5043f95f23644d6
+
+aug:
+  fill_value: -1
+
 eval:
   run_name: ""
   start_batch: 0
+  num_inference_steps: 20
+  use_rgb_as_diffuse: false
+  
+
+  shading_maskout_mode: PointCloud
+  # shading_maskout_mode: Cone
+  shading_maskout_bbox_dilation: 30
+  shading_maskout_bbox_depth_range: 4.0
+  # shading_maskout_pc_type: absolute
+  # shading_maskout_pc_range: 0.8
+  shading_maskout_pc_type: relative
+  shading_maskout_obj_dilation: 3
+  shading_maskout_cone_radius: 0.6
+  point_cloud_fov: 50
+  # shading_maskout_pc_above_cropping_type: abovebbox
+  shading_maskout_pc_above_cropping_type: argmin
+  shading_maskout_cone_angle: 90
+
+
+  device: cuda
+  weight_dtype: fp16
   # predictor_names: [depthanythingv2_relative, precompute_stablenormal, precompute]
   predictor_names: [zoedepth, precompute_stablenormal, precompute]
   # predictor_names: [zoedepth, omnidata, dfnet]
   post_compositing: false
   # results_dir: ${oc.env:SCRATCH}/results/${now:%Y-%m-%d_%H-%M-%S}
   results_dir: ${oc.env:SCRATCH}/results
-  shading_maskout_pc_range_relative: 0.5
+  shading_maskout_pc_range_relative: 0.5 # TODO: validate value
   forced_shading_mask_mode: override # override or combine
-  return_attention_maps: false
-  # controlnet_model_name_or_path: ${oc.env:SCRATCH}/openrooms_wo_bg_eccv/checkpoints/checkpoint-808000
   controlnet_model_name_or_path: ${oc.env:SCRATCH}/openrooms_wo_bg_eccv/checkpoints/checkpoint-808000
   controlnet_model_name_or_path_inv: ${oc.env:LOCAL_SCRATCH}/sdi/.cache/checkpoints_inv/checkpoint-270000
-  force_zenith_deg: null
-
-  # controlnet_conditioning_scale: 1.0
-  # guidance_scale: 7.0
-  # guess_mode: true
 
   controlnet_conditioning_scale: 1.0
   guidance_scale: 0.0
@@ -70,35 +89,9 @@ eval:
   output_shadow_comp_intermediate_images: true
   output_zero_comp_intrinsics: true
 
-  # shading_color_correction: [1.5, 1.5, 1.7]
-  shading_color_correction: null
-
   render_only_gt_dir: false
   render_zerocomp_only: false
 
   force_metallic_value: null
   force_roughness_value: null
   force_albedo_value: null
-
-attention_maps_control:
-  edit_before_softmax: false
-  float_32_autocast: false # needed for attention maps editing
-
-  min_timestep: 600
-  max_timestep: 1000
-
-  update_scale: 500
-
-  editable_resolutions:
-    - 16
-    - 32
-    - 64
-
-  original_shadow_threshold: 0.05
-  new_shadow_threshold: 0.05
-
-  editable_parts: []
-    # - controlnet_down
-    # - unet_down
-    # - unet_up
-

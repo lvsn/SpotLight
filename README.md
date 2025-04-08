@@ -15,14 +15,24 @@ TODO
 
 ## Quick Start
 
-First, clone this repository to your local machine, and install the dependencies (torch, torchvision, numpy, Pillow, and huggingface_hub). 
+First, clone the repository and load all the data.
 
 ```bash
 git clone git@github.com:lvsn/SpotLight.git
 cd SpotLight
+```
+
+Then, you can install the dependencies using and run the project in a virtual environment using this:
+
+```bash
 pip install -r requirements.txt
 ```
 
+Alternatively, if you want to run the project inside a Docker container, you can do so using the following command.
+
+```bash
+docker run -it --gpus all --mount type=bind,src=.,dst=/app ubuntu bash
+```
 
 ## Acknowledgements
 

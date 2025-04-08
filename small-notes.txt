@@ -1,0 +1,1 @@
+rclone sync --progress . tchai:/gel/usr/frfoc1/home-local2/spotlight

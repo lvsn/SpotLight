@@ -11,9 +11,9 @@ enable_xformers_memory_efficient_attention: false # TODO: true?
 feed_empty_prompt: true
 
 conditioning_maps: ['depth', 'normal', 'diffuse', 'mask', 'shading']
-dataset_dir: ${oc.env:SCRATCH}/control_eval/rendered_2024-10-20_19-07-58_control
-bg_estimates_dir: ${oc.env:SCRATCH}/compositing-outputs/WACV_bg_estimates
-pretrained_model_name_or_path: ${oc.env:HF_HUB_CACHE}/models--stabilityai--stable-diffusion-2-1/snapshots/5cae40e6a2745ae2b01ad92ae5043f95f23644d6
+dataset_dir: data/rendered_2024-10-20_19-07-58_control
+bg_estimates_dir: data/WACV_bg_estimates
+pretrained_model_name_or_path: stabilityai/stable-diffusion-2-1
 
 aug:
   fill_value: -1

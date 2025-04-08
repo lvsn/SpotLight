@@ -31,11 +31,11 @@ from diffusers import (
     AutoencoderKL,
     AsymmetricAutoencoderKL,
     ControlNetModel,
-    StableDiffusionControlNetPipeline,
     DDPMScheduler,
     DDIMScheduler,
     UNet2DConditionModel,
 )
+from pipeline_controlnet_spotlight_zc import ControlNetSpotLightZeroCompPipeline
 from diffusers.optimization import get_scheduler
 from diffusers.utils import check_min_version, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
@@ -60,10 +60,10 @@ from PIL import ImageDraw
 import shutil
 from copy import deepcopy
 import json
-import src.compositor
+import compositor
 from omegaconf import OmegaConf
 import ezexr
-from src.video_creator import FrameInterpolator
+from video_creator import FrameInterpolator
 import PIL.Image
 # hydra.output_subdir = None  # Prevent hydra from changing the working directory
 # hydra.job.chdir = False  # Prevent hydra from changing the working directory
@@ -98,7 +98,7 @@ def get_shadow_mask(directory, batch_idx, *, shadow_opacity_threshold=0.2):
     return shadow_mask
 
 
-@hydra.main(config_path="configs", config_name="fred_attention_maps", version_base='1.1')
+@hydra.main(config_path="configs", config_name="default", version_base='1.1')
 def main(args):
     # use that folder format: %Y-%m-%d_%H-%M-%S
     
@@ -112,14 +112,14 @@ def main(args):
 
     sdi_utils.seed_all(args.seed)
 
-    # light_estimator = src.compositor.initialize_light_estimator(args)
+    # light_estimator = compositor.initialize_light_estimator(args)
     tokenizer = AutoTokenizer.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="tokenizer",
         revision=None,
         use_fast=False,
     )
-    vae, unet, text_encoder, controlnet = src.compositor.load_models(args, tokenizer)
+    vae, unet, text_encoder, controlnet = compositor.load_models(args, tokenizer)
 
     to_controlnet_input = ToControlNetInput(
         device=args.eval.device,
@@ -133,7 +133,7 @@ def main(args):
                                  conditioning_maps=args.conditioning_maps,
                                  predictor_names=args.eval.predictor_names,)
 
-    val_dataloader = src.compositor.create_dataloader(args, to_controlnet_input, start_batch=args.eval.start_batch)
+    val_dataloader = compositor.create_dataloader(args, to_controlnet_input, start_batch=args.eval.start_batch) # TODO: end batch too?
 
     weight_dtype = torch.float32
     if args.eval.weight_dtype == "fp16":
@@ -146,7 +146,7 @@ def main(args):
     text_encoder.to(args.eval.device, dtype=weight_dtype)
     controlnet.to(args.eval.device, dtype=weight_dtype)
 
-    pipeline = StableDiffusionControlNetPipeline.from_pretrained(
+    pipeline = ControlNetSpotLightZeroCompPipeline.from_pretrained(
         args.pretrained_model_name_or_path,
         vae=vae,
         text_encoder=text_encoder,
@@ -169,7 +169,7 @@ def main(args):
     if args.eval.relight_bg:
         controlnet_inv = ControlNetModel.from_pretrained(args.eval.controlnet_model_name_or_path_inv, subfolder="controlnet",
                                                         light_parametrization=args.light_parametrization)
-        pipeline_inv = StableDiffusionControlNetPipeline.from_pretrained(
+        pipeline_inv = ControlNetSpotLightZeroCompPipeline.from_pretrained(
             args.pretrained_model_name_or_path,
             vae=vae,
             text_encoder=text_encoder,
@@ -212,7 +212,7 @@ def main(args):
 
                 image_logs = None
                 if args.dataset_name != 'real_world':
-                    conditioning_zerocomp, dst_batch, obj_mask, bg_image_for_balance, image_logs, shading_mask_zero_comp = src.compositor.composite_batch(
+                    conditioning_zerocomp, dst_batch, obj_mask, bg_image_for_balance, image_logs, shading_mask_zero_comp = compositor.composite_batch(
                         batch=batch,
                         args=args, 
                         to_predictors=to_predictors,
@@ -235,7 +235,7 @@ def main(args):
 
                 if args.eval.negative_sample_type in ['zerocomp', 'sh_auto']:
                              
-                    conditioning_zerocomp, dst_batch, obj_mask, bg_image_for_balance, image_logs, shading_mask_zero_comp = src.compositor.composite_batch(
+                    conditioning_zerocomp, dst_batch, obj_mask, bg_image_for_balance, image_logs, shading_mask_zero_comp = compositor.composite_batch(
                         batch=batch,
                         args=args, 
                         to_predictors=to_predictors,
@@ -246,7 +246,7 @@ def main(args):
                         negative_image_logs = image_logs
                         conditioning_negative = conditioning_zerocomp
                         
-                    pred_zerocomp = src.compositor.run_inference(
+                    pred_zerocomp = compositor.run_inference(
                         conditioning=conditioning_zerocomp, 
                         dst_batch=dst_batch, 
                         pipeline=pipeline, 
@@ -260,14 +260,14 @@ def main(args):
                     # args_copy = deepcopy(args)
                     # args_copy.eval.shading_maskout_pc_type = 'absolute'
                     # args_copy.eval.shading_maskout_pc_range = 0
-                    conditioning_no_shadow, dst_batch, obj_mask, bg_image_for_balance, _ = src.compositor.composite_batch(
+                    conditioning_no_shadow, dst_batch, obj_mask, bg_image_for_balance, _ = compositor.composite_batch(
                         batch=batch,
                         args=args, 
                         to_predictors=to_predictors,
                         forced_shading_mask=(dilated_obj_mask[0, 0] != 0.0),
                         return_shading_mask=False,
                     )
-                    pred_no_shadow = src.compositor.run_inference(
+                    pred_no_shadow = compositor.run_inference(
                         conditioning=conditioning_no_shadow, 
                         dst_batch=dst_batch, 
                         pipeline=pipeline, 
@@ -286,7 +286,7 @@ def main(args):
                     mask_disp.save(os.path.join(results_dir, scene_name, 'post_comp', f"mask.png"))
 
                 if args.eval.render_zerocomp_only:
-                    conditioning_zerocomp, dst_batch, obj_mask, bg_image_for_balance, image_logs, shading_mask_zero_comp = src.compositor.composite_batch(
+                    conditioning_zerocomp, dst_batch, obj_mask, bg_image_for_balance, image_logs, shading_mask_zero_comp = compositor.composite_batch(
                         batch=batch,
                         args=args, 
                         to_predictors=to_predictors,
@@ -297,7 +297,7 @@ def main(args):
                         negative_image_logs = image_logs
                         conditioning_negative = conditioning_zerocomp
                         
-                    pred_zerocomp = src.compositor.run_inference(
+                    pred_zerocomp = compositor.run_inference(
                         conditioning=conditioning_zerocomp, 
                         dst_batch=dst_batch, 
                         pipeline=pipeline, 
@@ -315,7 +315,7 @@ def main(args):
 
                 if args.eval.negative_sample_type == 'no_shadow':
                     
-                    conditioning_negative, _, _, _, negative_image_logs, negative_shading_mask = src.compositor.composite_batch(
+                    conditioning_negative, _, _, _, negative_image_logs, negative_shading_mask = compositor.composite_batch(
                         batch=batch,
                         args=args,
                         to_predictors=to_predictors,
@@ -338,10 +338,10 @@ def main(args):
 
                     shadow_map_name = f"{scene_name}_light_auto"
                     # TODO: adjust light sphere radius per frame... render auto per frame?
-                    shadow_auto_all = src.compositor.render_numpy_shadow(scene_name, shadow_map_name, auto_light_position_blender, args.dataset_dir, results_dir, light_distance=args.eval.light_distance, light_radius=args.eval.light_radius)
+                    shadow_auto_all = compositor.render_numpy_shadow(scene_name, shadow_map_name, auto_light_position_blender, args.dataset_dir, results_dir, light_distance=args.eval.light_distance, light_radius=args.eval.light_radius)
                     shadow_auto_all = sdi_utils.numpy_to_tensor(shadow_auto_all).to(dtype=batch['mask'].dtype).to(batch['mask'].device) * (1 - batch['mask'])
                     
-                    conditioning_negative, _, _, _, negative_image_logs, negative_shading_mask = src.compositor.composite_batch(
+                    conditioning_negative, _, _, _, negative_image_logs, negative_shading_mask = compositor.composite_batch(
                         batch=batch,
                         args=args,
                         to_predictors=to_predictors,
@@ -349,7 +349,7 @@ def main(args):
                         return_shading_mask=True
                     )
 
-                    pred_auto_all = src.compositor.run_inference(
+                    pred_auto_all = compositor.run_inference(
                         conditioning=conditioning_negative, 
                         dst_batch=dst_batch, 
                         pipeline=pipeline, 
@@ -406,7 +406,7 @@ def main(args):
                     elif args.dataset_name == 'scribbles':
                         shadow_custom = batch[f'positive_shadow_{frame_dict["shadow_map_idx"]}'] * (1 - batch['mask'])
                     else:
-                        shadow_custom = src.compositor.render_numpy_shadow(scene_name, shadow_map_name, frame_dict['blender_light_xyz_position_object_space'], args.dataset_dir, results_dir, light_distance=args.eval.light_distance, light_radius=args.eval.light_radius)
+                        shadow_custom = compositor.render_numpy_shadow(scene_name, shadow_map_name, frame_dict['blender_light_xyz_position_object_space'], args.dataset_dir, results_dir, light_distance=args.eval.light_distance, light_radius=args.eval.light_radius)
                         shadow_custom = sdi_utils.numpy_to_tensor(shadow_custom).to(dtype=batch['mask'].dtype).to(batch['mask'].device) * (1 - batch['mask'])
 
                     print('done')
@@ -421,10 +421,10 @@ def main(args):
                             -frame_dict['blender_light_xyz_position_object_space'][1],
                             frame_dict['blender_light_xyz_position_object_space'][2]
                         ]
-                        shadow_opposite = src.compositor.render_numpy_shadow(scene_name, shadow_map_name, blender_light_xyz_position_object_space_opposite, args.dataset_dir, results_dir, light_distance=args.eval.light_distance, light_radius=args.eval.light_radius)
+                        shadow_opposite = compositor.render_numpy_shadow(scene_name, shadow_map_name, blender_light_xyz_position_object_space_opposite, args.dataset_dir, results_dir, light_distance=args.eval.light_distance, light_radius=args.eval.light_radius)
                         shadow_opposite = sdi_utils.numpy_to_tensor(shadow_opposite).to(dtype=batch['mask'].dtype).to(batch['mask'].device) * (1 - batch['mask'])
 
-                        conditioning_negative, _, _, _, negative_image_logs, negative_shading_mask = src.compositor.composite_batch(
+                        conditioning_negative, _, _, _, negative_image_logs, negative_shading_mask = compositor.composite_batch(
                             batch=batch, 
                             args=args, 
                             to_predictors=to_predictors, 
@@ -436,7 +436,7 @@ def main(args):
                             shadow_opposite = (1 - batch[f'neg_shadow'] )* (1 - batch['mask'])
                         elif args.dataset_name == 'scribbles':
                             shadow_opposite = batch[f'negative_shadow_{frame_dict["shadow_map_idx"]}'] * (1 - batch['mask'])
-                        conditioning_negative, _, _, _, negative_image_logs, negative_shading_mask = src.compositor.composite_batch(
+                        conditioning_negative, _, _, _, negative_image_logs, negative_shading_mask = compositor.composite_batch(
                             batch=batch, 
                             args=args, 
                             to_predictors=to_predictors, 
@@ -447,7 +447,7 @@ def main(args):
                     if args.eval.use_coarse_shadow_as_is:
                         assert args.eval.relighting_guidance_scale == 1.0, 'negative sample not supported for coarse shadow (could easily be added)'
                         background_coarse = batch['pixel_values'] * (1 - args.eval.shadow_opacity * shadow_custom)
-                        conditioning_custom, dst_batch, obj_mask, bg_image_for_balance, positive_image_logs, positive_shading_mask = src.compositor.composite_batch(
+                        conditioning_custom, dst_batch, obj_mask, bg_image_for_balance, positive_image_logs, positive_shading_mask = compositor.composite_batch(
                             batch=batch, 
                             args=args, 
                             to_predictors=to_predictors, 
@@ -456,7 +456,7 @@ def main(args):
                             return_shading_mask=True
                         )
                     else:
-                        conditioning_custom, dst_batch, obj_mask, bg_image_for_balance, positive_image_logs, positive_shading_mask = src.compositor.composite_batch(
+                        conditioning_custom, dst_batch, obj_mask, bg_image_for_balance, positive_image_logs, positive_shading_mask = compositor.composite_batch(
                             batch=batch, 
                             args=args, 
                             to_predictors=to_predictors, 
@@ -493,7 +493,7 @@ def main(args):
                         
                     shadow_guidances = torch.cat([shadow_custom, shadow_negative_sample])
                     background_coarse = batch['pixel_values'] * (1 - args.eval.shadow_opacity * torch.cat([shadow_custom, shadow_negative_sample]))
-                    shadow_composites = src.compositor.alpha_blend(batch['diffuse'], background_coarse)
+                    shadow_composites = compositor.alpha_blend(batch['diffuse'], background_coarse)
 
                     if args.eval.output_shadow_comp_intermediate_images:
                         shadow_positive_np = sdi_utils.tensor_to_numpy(shadow_custom)
@@ -501,9 +501,9 @@ def main(args):
                         shadow_positive_composite_np = sdi_utils.tensor_to_numpy(shadow_composites[0])
                         shadow_negative_composite_np = sdi_utils.tensor_to_numpy(shadow_composites[1])
 
-                        shadow_positive_outline = src.compositor.get_outline_visualization(background_coarse[0].unsqueeze(0), batch['mask'][0].unsqueeze(0))
+                        shadow_positive_outline = compositor.get_outline_visualization(background_coarse[0].unsqueeze(0), batch['mask'][0].unsqueeze(0))
                         shadow_positive_outline_np = sdi_utils.tensor_to_numpy(shadow_positive_outline)
-                        shadow_negative_outline = src.compositor.get_outline_visualization(background_coarse[1].unsqueeze(0), batch['mask'][0].unsqueeze(0))
+                        shadow_negative_outline = compositor.get_outline_visualization(background_coarse[1].unsqueeze(0), batch['mask'][0].unsqueeze(0))
                         shadow_negative_outline_np = sdi_utils.tensor_to_numpy(shadow_negative_outline)
 
                         # export
@@ -528,7 +528,7 @@ def main(args):
 
 
                     if args.eval.sd_edit_cleanup_percentage > 0.0:
-                        conditioning_sd_edit, _, _, _,_ = src.compositor.composite_batch(
+                        conditioning_sd_edit, _, _, _,_ = compositor.composite_batch(
                             batch=batch, 
                             args=args, 
                             to_predictors=to_predictors, 
@@ -538,7 +538,7 @@ def main(args):
                     else:
                         conditioning_sd_edit = None
                         
-                    pred, pred_image_logs = src.compositor.run_inference(
+                    pred, pred_image_logs = compositor.run_inference(
                         conditioning=conditioning_custom,
                         dst_batch=dst_batch, 
                         pipeline=pipeline, 
@@ -580,7 +580,7 @@ def main(args):
                         forced_shading_mask_bg_new_shadow = ~((shadow_custom[0,0] > 0.1) | (dilated_obj_mask[0, 0] != 0.0))
 
                         
-                        conditioning_bg_new_shadow, dst_batch, obj_mask, bg_image_for_balance, image_logs = src.compositor.composite_batch(
+                        conditioning_bg_new_shadow, dst_batch, obj_mask, bg_image_for_balance, image_logs = compositor.composite_batch(
                             batch=batch, 
                             args=args, 
                             to_predictors=to_predictors,
@@ -613,7 +613,7 @@ def main(args):
                             intersection_mask = (forced_shading_mask_bg_new_shadow & forced_shading_mask_bg_negative).float().unsqueeze(0).unsqueeze(0)
                             bg_relighting_guidance_mask = F.interpolate(intersection_mask, size=(64, 64), mode='bilinear', antialias=True)
 
-                            conditioning_bg_negative, _, _, _, _ = src.compositor.composite_batch(
+                            conditioning_bg_negative, _, _, _, _ = compositor.composite_batch(
                                 batch=batch, 
                                 args=args, 
                                 to_predictors=to_predictors,
@@ -621,7 +621,7 @@ def main(args):
                                 forced_shading_mask=forced_shading_mask_bg_negative,
                             )
                             
-                            conditioning_fully_known, _, _, _, _ = src.compositor.composite_batch(
+                            conditioning_fully_known, _, _, _, _ = compositor.composite_batch(
                                 batch=batch, 
                                 args=args, 
                                 to_predictors=to_predictors,
@@ -629,7 +629,7 @@ def main(args):
                                 forced_shading_mask=torch.zeros_like(forced_shading_mask_bg_new_shadow),
                             )
 
-                            pred_relight_bg_combine_inv = src.compositor.run_inference(
+                            pred_relight_bg_combine_inv = compositor.run_inference(
                                 conditioning=conditioning_bg_new_shadow,
                                 dst_batch=dst_batch, 
                                 pipeline=pipeline_inv, 
@@ -658,7 +658,7 @@ def main(args):
 
 
 
-                        pred_relight_bg_inv = src.compositor.run_inference(
+                        pred_relight_bg_inv = compositor.run_inference(
                             conditioning=conditioning_bg_new_shadow,
                             dst_batch=dst_batch, 
                             pipeline=pipeline_inv, 
@@ -690,7 +690,7 @@ def main(args):
 
 
                             forced_shading_mask_no_obj = torch.ones_like(forced_shading_mask_bg_new_shadow, dtype=torch.bool)
-                            conditioning_bg_no_obj, dst_batch, obj_mask, bg_image_for_balance, image_logs = src.compositor.composite_batch(
+                            conditioning_bg_no_obj, dst_batch, obj_mask, bg_image_for_balance, image_logs = compositor.composite_batch(
                                 batch=batch_mod,
                                 args=args, 
                                 to_predictors=to_predictors,
@@ -706,7 +706,7 @@ def main(args):
                                     elif type(image) == PIL.Image.Image:
                                         image.save(intrinsic_png_path)
 
-                            pred_relight_bg_inv_no_obj = src.compositor.run_inference(
+                            pred_relight_bg_inv_no_obj = compositor.run_inference(
                                 conditioning=conditioning_bg_no_obj,
                                 dst_batch=dst_batch, 
                                 pipeline=pipeline_inv, 

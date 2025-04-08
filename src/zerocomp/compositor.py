@@ -28,12 +28,11 @@ from transformers import AutoTokenizer, PretrainedConfig
 from torchvision.utils import make_grid
 import cv2
 from diffusers.utils.torch_utils import randn_tensor
-import src.imagefilters
+import imagefilters
 from diffusers import (
     AutoencoderKL,
     AsymmetricAutoencoderKL,
     ControlNetModel,
-    StableDiffusionControlNetPipeline,
     DDPMScheduler,
     DDIMScheduler,
     UNet2DConditionModel,

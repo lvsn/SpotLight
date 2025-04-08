@@ -582,7 +582,7 @@ class ToPredictors(object):
         if self.diffuse_model == 'dfnet':
             self.df_model = handle_dfnet_w_depth_normal().to(self.device)
         elif self.diffuse_model == 'material_diffusion':
-            self.df_model = handle_material_diffusion().to(self.device)
+            self.df_model = handle_material_diffusion().to(self.device) # TODO: fix this?
         elif self.diffuse_model == 'precompute':
             self.df_model = None
 

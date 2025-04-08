@@ -1,0 +1,10 @@
+diffusers==0.20.0
+gradio==3.48.0
+imageio==2.34.1
+numpy==1.26.4
+opencv-python==4.9.0.80
+transformers==4.40.2
+skylibs
+OpenEXR
+kornia
+huggingface-hub==0.24

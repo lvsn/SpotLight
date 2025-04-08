@@ -1,0 +1,104 @@
+defaults:
+  - fred_render_rot_light
+  - _self_
+
+# can't use xformers' attention because it doesn't output the intermediate attention maps
+enable_xformers_memory_efficient_attention: false
+
+conditioning_maps: ['depth', 'normal', 'diffuse', 'mask', 'shading']
+
+light_parametrization: null
+#dataset_dir: ${oc.env:SCRATCH}/shadowmap
+#dataset_dir: ${oc.env:SCRATCH}/compositing-outputs/singleimagelightpredictions_outputs/rendered_2024-09-16_10-29-12_plane
+dataset_dir: ${oc.env:SCRATCH}/control_eval/rendered_2024-10-20_19-07-58_control
+bg_estimates_dir: ${oc.env:SCRATCH}/compositing-outputs/WACV_bg_estimates
+# 32 bits
+eval:
+  run_name: ""
+  start_batch: 0
+  # predictor_names: [depthanythingv2_relative, precompute_stablenormal, precompute]
+  predictor_names: [zoedepth, precompute_stablenormal, precompute]
+  # predictor_names: [zoedepth, omnidata, dfnet]
+  post_compositing: false
+  # results_dir: ${oc.env:SCRATCH}/results/${now:%Y-%m-%d_%H-%M-%S}
+  results_dir: ${oc.env:SCRATCH}/results
+  shading_maskout_pc_range_relative: 0.5
+  forced_shading_mask_mode: override # override or combine
+  return_attention_maps: false
+  # controlnet_model_name_or_path: ${oc.env:SCRATCH}/openrooms_wo_bg_eccv/checkpoints/checkpoint-808000
+  controlnet_model_name_or_path: ${oc.env:SCRATCH}/openrooms_wo_bg_eccv/checkpoints/checkpoint-808000
+  controlnet_model_name_or_path_inv: ${oc.env:LOCAL_SCRATCH}/sdi/.cache/checkpoints_inv/checkpoint-270000
+  force_zenith_deg: null
+
+  # controlnet_conditioning_scale: 1.0
+  # guidance_scale: 7.0
+  # guess_mode: true
+
+  controlnet_conditioning_scale: 1.0
+  guidance_scale: 0.0
+  guess_mode: false
+
+  use_relighting_guidance: true
+  relighting_guidance_scale: 3.0
+  relighting_guidance_rescale: 0.0 # same as in the Common diffusion ... paper
+  relight_outside_shadow: false
+  relight_outside_shadow_dilation: 0
+
+  obj_mask_dilation_shadowcomp: 1
+
+  relight_bg: false
+  relight_bg_no_obj_for_post_comp: false
+
+  use_coarse_shadow_as_is: false
+  sd_edit_cleanup_percentage: 0.0 # max = 1.0
+
+  shadow_guidance_mode: latent_blending # latent_blending # rgb_gradient
+
+  shadow_uncertainty_enabled: false
+
+  infill_shadow: true
+  
+  generate_images_for_post_compositing: true
+  negative_sample_type: opposite_azimuth # opposite_azimuth, sh_auto, zerocomp
+  shadow_opacity: 1.0
+  latent_mask_weight: 0.05
+  latent_mask_edge_boost: 2.0
+  dilate_shadow_backbone: kornia
+  light_radius: 1.0
+  light_distance: 10.0
+
+  output_shadow_comp_intermediate_images: true
+  output_zero_comp_intrinsics: true
+
+  # shading_color_correction: [1.5, 1.5, 1.7]
+  shading_color_correction: null
+
+  render_only_gt_dir: false
+  render_zerocomp_only: false
+
+  force_metallic_value: null
+  force_roughness_value: null
+  force_albedo_value: null
+
+attention_maps_control:
+  edit_before_softmax: false
+  float_32_autocast: false # needed for attention maps editing
+
+  min_timestep: 600
+  max_timestep: 1000
+
+  update_scale: 500
+
+  editable_resolutions:
+    - 16
+    - 32
+    - 64
+
+  original_shadow_threshold: 0.05
+  new_shadow_threshold: 0.05
+
+  editable_parts: []
+    # - controlnet_down
+    # - unet_down
+    # - unet_up
+

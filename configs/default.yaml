@@ -1,3 +1,7 @@
+hydra:
+  job:
+    chdir: false
+
 seed: 0
 batch_size: 1
 dataloader_num_workers: 4
@@ -17,6 +21,12 @@ pretrained_model_name_or_path: stabilityai/stable-diffusion-2-1
 
 aug:
   fill_value: -1
+
+val_scheduler:
+  name: ddim
+  kwargs:
+    timestep_spacing: 'trailing'
+    rescale_betas_zero_snr: true
 
 eval:
   run_name: ""
@@ -72,8 +82,6 @@ eval:
   sd_edit_cleanup_percentage: 0.0 # max = 1.0
 
   shadow_guidance_mode: latent_blending # latent_blending # rgb_gradient
-
-  shadow_uncertainty_enabled: false
 
   infill_shadow: true
   

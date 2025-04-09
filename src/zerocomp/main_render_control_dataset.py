@@ -1,69 +1,37 @@
 import logging
 import os
-
-import comet_ml
-import accelerate
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
-import transformers
-from torch.utils.data import DataLoader
-from accelerate import Accelerator
-# from accelerate.logging import get_logger
 import logging
-from packaging import version
 from PIL import Image
 import PIL.Image
-from torchvision.transforms import v2
-from torchvision.ops import masks_to_boxes
 from tqdm.auto import tqdm
 from transformers import AutoTokenizer, PretrainedConfig
-from torchvision.utils import make_grid
-import torchvision.transforms.functional as TF
-import cv2
 from datetime import datetime
 from diffusers.utils.torch_utils import randn_tensor
 import re
-import light_control.sh_light_utils
 
 from diffusers import (
-    AutoencoderKL,
-    AsymmetricAutoencoderKL,
     ControlNetModel,
-    DDPMScheduler,
     DDIMScheduler,
-    UNet2DConditionModel,
 )
 from pipeline_controlnet_spotlight_zc import ControlNetSpotLightZeroCompPipeline
 from diffusers.optimization import get_scheduler
 from diffusers.utils import check_min_version, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
 
-from data.dataset_lsun import LsunDataset
-from data.dataset_composite import CompositeDataset
-from data.dataset_render import RenderDataset
 from controlnet_input_handle import ToControlNetInput, ToPredictors, collate_fn, match_depth_from_footprint
-from train_controlnet import import_model_class_from_model_name_or_path
 # from models.controlnet import ControlNetModel
 # from pipeline_controlnet import StableDiffusionControlNetPipeline
 
 import sdi_utils
-import itertools
 import hydra
-from hydra.core.hydra_config import HydraConfig
-import open3d as o3d
-import subprocess
 from tempfile import TemporaryDirectory
-from typing import Literal
-from PIL import ImageDraw
-import shutil
 from copy import deepcopy
 import json
 import compositor
 from omegaconf import OmegaConf
-import ezexr
-from video_creator import FrameInterpolator
 import PIL.Image
 # hydra.output_subdir = None  # Prevent hydra from changing the working directory
 # hydra.job.chdir = False  # Prevent hydra from changing the working directory
@@ -98,7 +66,7 @@ def get_shadow_mask(directory, batch_idx, *, shadow_opacity_threshold=0.2):
     return shadow_mask
 
 
-@hydra.main(config_path="configs", config_name="default", version_base='1.1')
+@hydra.main(config_path="../../configs", config_name="default", version_base='1.1')
 def main(args):
     # use that folder format: %Y-%m-%d_%H-%M-%S
     
@@ -323,49 +291,7 @@ def main(args):
                         return_shading_mask=True
                     )
 
-                if args.eval.negative_sample_type == 'sh_auto':
-                    normals = sdi_utils.tensor_to_numpy(batch['normal'])
-                    obj_mask = (sdi_utils.tensor_to_numpy(batch['mask']) > 0.9)[:, :, 0]
-                    diffuse = sdi_utils.tensor_to_numpy(batch['diffuse'])
-
-                    # We assume a gamma of 2.2 for linearization
-                    sh_coefficients, auto_light_position_skylibs = light_control.sh_light_utils.extract_sh(
-                        pred_zerocomp_np ** 2.2, None, normals, obj_mask, diffuse[..., :3], normalize_direction=True
-                    )
-                    
-                    auto_light_position_blender = light_control.sh_light_utils.skylibs_to_blender_xyz(auto_light_position_skylibs)
-
-
-                    shadow_map_name = f"{scene_name}_light_auto"
-                    # TODO: adjust light sphere radius per frame... render auto per frame?
-                    shadow_auto_all = compositor.render_numpy_shadow(scene_name, shadow_map_name, auto_light_position_blender, args.dataset_dir, results_dir, light_distance=args.eval.light_distance, light_radius=args.eval.light_radius)
-                    shadow_auto_all = sdi_utils.numpy_to_tensor(shadow_auto_all).to(dtype=batch['mask'].dtype).to(batch['mask'].device) * (1 - batch['mask'])
-                    
-                    conditioning_negative, _, _, _, negative_image_logs, negative_shading_mask = compositor.composite_batch(
-                        batch=batch,
-                        args=args,
-                        to_predictors=to_predictors,
-                        forced_shading_mask=(shadow_auto_all[0,0] > 0.1) | (dilated_obj_mask[0, 0] != 0.0),
-                        return_shading_mask=True
-                    )
-
-                    pred_auto_all = compositor.run_inference(
-                        conditioning=conditioning_negative, 
-                        dst_batch=dst_batch, 
-                        pipeline=pipeline, 
-                        args=args,
-                        bg_image_for_balance=bg_image_for_balance, 
-                        obj_mask=obj_mask,
-                        controlnet_conditioning_scale=args.eval.controlnet_conditioning_scale,
-                        guess_mode=args.eval.guess_mode,
-                    )
-                    # # also save pred_auto_all
-                    os.makedirs(os.path.join(results_dir, scene_name, 'relight_bg'), exist_ok=True)
-                    pred_auto_all_disp = (sdi_utils.tensor_to_numpy(pred_auto_all) * 255).astype(np.uint8)
-                    pred_auto_all_disp = Image.fromarray(pred_auto_all_disp)
-                    pred_auto_all_disp.save(os.path.join(results_dir, scene_name, 'relight_bg', f"auto_shadow_{frame_name}.png"))
-                    
-                # auto_azimuth, auto_zenith = light_control.sh_light_utils.cartesian_to_spherical(*auto_light_position_skylibs)
+                # auto_azimuth, auto_zenith = sh_light_utils.cartesian_to_spherical(*auto_light_position_skylibs)
                 # auto_azimuth_deg, auto_zenith_deg = np.rad2deg(auto_azimuth), np.rad2deg(auto_zenith)
                 
                 if args.dataset_name == 'real_world':

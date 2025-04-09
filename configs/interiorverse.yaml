@@ -1,0 +1,12 @@
+defaults:
+  - default
+  - _self_
+
+conditioning_maps: [depth, normal, diffuse, shading, mask, roughness, metallic]
+
+eval:
+  run_name: "interiorverse"
+  
+  controlnet_model_name_or_path: checkpoints/zerocomp_interiorverse/checkpoint-222000
+  relight_bg: false
+  controlnet_model_name_or_path_inv: null

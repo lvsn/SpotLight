@@ -1,17 +1,13 @@
-torch
 xformers
 urllib3
-torchvision
 torchinfo
 numpy
 tqdm
 pillow
 opencv-python
 OpenEXR
-triton
 omegaconf
 hydra-core
-xformers
 transformers
 bitsandbytes
 timm
@@ -24,4 +20,5 @@ lightning
 open3d
 huggingface_hub
 kornia
+skylibs
 diffusers==0.32.2

@@ -24,11 +24,10 @@ import PIL.Image
 from torchvision.transforms import v2
 from torchvision.ops import masks_to_boxes
 from tqdm.auto import tqdm
-from transformers import AutoTokenizer, PretrainedConfig
+from transformers import AutoTokenizer, PretrainedConfig, CLIPTextModel
 from torchvision.utils import make_grid
 import cv2
 from diffusers.utils.torch_utils import randn_tensor
-import imagefilters
 from diffusers import (
     AutoencoderKL,
     AsymmetricAutoencoderKL,
@@ -40,14 +39,10 @@ from diffusers import (
 from diffusers.optimization import get_scheduler
 from diffusers.utils import check_min_version, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
-
-from data.dataset_lsun import LsunDataset
-from data.dataset_bunny import BunnyDataset
-from data.dataset_composite import CompositeDataset
 from data.dataset_render import RenderDataset
 from data.dataset_real_world import RealWorldDataset
 from controlnet_input_handle import ToControlNetInput, ToPredictors, collate_fn, match_depth_from_footprint
-from train_controlnet import import_model_class_from_model_name_or_path
+# from train_controlnet import import_model_class_from_model_name_or_path
 import kornia.morphology
 # from models.controlnet import ControlNetModel
 # from pipeline_controlnet import StableDiffusionControlNetPipeline
@@ -62,42 +57,13 @@ from tempfile import TemporaryDirectory
 from typing import Literal
 from PIL import ImageDraw
 import shutil
-import light_control.sh_light_utils
+import sh_light_utils
 import pickle
 import json
-import light_control
 from typing import Optional, Dict, Any
 from controlnet_input_handle import compute_shading
 import ezexr
 from torchvision.transforms import Resize
-
-# def recursive_info(data, indent=0):
-#     spacer = ' ' * indent
-#     result = ""
-#     
-#     if isinstance(data, dict):
-#         result += f"{spacer}Dictionary:\n"
-#         for key, value in data.items():
-#             result += f"{spacer}  Key: {key} -> "
-#             result += recursive_info(value, indent + 4)
-#     elif isinstance(data, list):
-#         result += f"{spacer}List of {len(data)} items:\n"
-#         for index, item in enumerate(data):
-#             result += f"{spacer}  Index {index}: "
-#             result += recursive_info(item, indent + 4)
-#     elif isinstance(data, tuple):
-#         result += f"{spacer}Tuple of {len(data)} items:\n"
-#         for index, item in enumerate(data):
-#             result += f"{spacer}  Index {index}: "
-#             result += recursive_info(item, indent + 4)
-#     elif isinstance(data, torch.Tensor):
-#         result += f"{spacer}PyTorch Tensor with shape {data.shape}\n"
-#     elif isinstance(data, np.ndarray):
-#         result += f"{spacer}NumPy ndarray with shape {data.shape}\n"
-#     else:
-#         result += f"{spacer}{type(data).__name__}: {data}\n"
-#     
-#     return result
 
 def recursive_info(data):
     if isinstance(data, dict):
@@ -115,8 +81,7 @@ def recursive_info(data):
 
 
 def load_models(args, tokenizer):
-    text_encoder_cls = import_model_class_from_model_name_or_path(args.pretrained_model_name_or_path, None)
-    text_encoder = text_encoder_cls.from_pretrained(
+    text_encoder = CLIPTextModel.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="text_encoder", revision=None
     )
     
@@ -125,8 +90,7 @@ def load_models(args, tokenizer):
         args.pretrained_model_name_or_path, subfolder="unet", revision=None
     )
 
-    controlnet = ControlNetModel.from_pretrained(args.eval.controlnet_model_name_or_path, subfolder="controlnet",
-                                                light_parametrization=args.light_parametrization)
+    controlnet = ControlNetModel.from_pretrained(args.eval.controlnet_model_name_or_path, subfolder="controlnet")
 
     vae.requires_grad_(False)
     unet.requires_grad_(False)
@@ -183,7 +147,7 @@ def alpha_blend(obj_map, bg_map, *, color_channels=3):
     
     return obj_map[:, :color_channels, :, :] + bg_map[:, :color_channels, :, :] * (1 - obj_map[:, color_channels:(color_channels+1), :, :])
 
-def composite_batch(batch, args, to_predictors,  EPS=1e-6, *, forced_shading_mask=None, override_image_for_shading_computation=None, shadow_uncertainty_enabled=False,
+def composite_batch(batch, args, to_predictors,  EPS=1e-6, *, forced_shading_mask=None, override_image_for_shading_computation=None,
                     return_shading_mask=False):
     bs = batch['pixel_values'].shape[0]
     assert bs == 1

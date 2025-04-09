@@ -899,18 +899,12 @@ class ControlNetSpotLightZeroCompPipeline(
         # added for light control
         timestep_cond=None,
         class_labels: Optional[torch.Tensor] = None,
-        # attention maps control
-        return_attention_maps: bool = False,
-        batch_3_shadow: bool = False, 
-        batch_3_shadow_config: Optional[Dict[str, Any]] = None,
-        batch_3_shadow_data: Optional[Dict[str, Any]] = None,
+        # custom
         relighting_guidance: Optional[list] = None,
         relighting_guidance_start_provided: Optional[bool] = False,
         relighting_guidance_scale: Optional[float]=0.0,
         relighting_guidance_rescale: Optional[float]=0.0, # 0.7 is used in Common diffusion schedules are flawed!
         relighting_guidance_mask: Optional[torch.Tensor] = None,
-        shadow_uncertainty_enabled: bool = False,
-        new_shadow: Optional[torch.Tensor] = None,
         sd_edit_cleanup_percentage: Optional[float] = 0.0,
         sd_edit_image: PipelineImageInput = None,
         #
@@ -1169,10 +1163,6 @@ class ControlNetSpotLightZeroCompPipeline(
         else:
             assert False
 
-        # if batch_3_shadow:
-        #     # TODO: added by fred
-        #     timesteps = [t for t in timesteps if t < 600]
-
         # 5. Prepare timesteps
         timesteps, num_inference_steps = retrieve_timesteps(self.scheduler, num_inference_steps, device, timesteps)
         if sd_edit_cleanup_percentage > 0.0:
@@ -1237,10 +1227,6 @@ class ControlNetSpotLightZeroCompPipeline(
         is_unet_compiled = is_compiled_module(self.unet)
         is_controlnet_compiled = is_compiled_module(self.controlnet)
         is_torch_higher_equal_2_1 = is_torch_version(">=", "2.1")
-        if return_attention_maps:
-            all_attention_maps = []
-        else:
-            all_attention_maps = None
         soft_latents = None
 
         debug_decoded_timesteps = []
@@ -1323,9 +1309,6 @@ class ControlNetSpotLightZeroCompPipeline(
                     return_dict=False,
                     timestep_cond=timestep_cond,
                     class_labels=class_labels,
-                    batch_3_shadow=batch_3_shadow,
-                    batch_3_shadow_config=batch_3_shadow_config,
-                    batch_3_shadow_data={**batch_3_shadow_data, "timestep": t.item(), "model": "controlnet"} if batch_3_shadow_data else dict(),
                 )
 
                 if guess_mode and self.do_classifier_free_guidance:
@@ -1336,7 +1319,7 @@ class ControlNetSpotLightZeroCompPipeline(
                     mid_block_res_sample = torch.cat([torch.zeros_like(mid_block_res_sample), mid_block_res_sample])
 
                 # predict the noise residual
-                output = self.unet(
+                noise_pred = self.unet(
                     latent_model_input,
                     t,
                     encoder_hidden_states=prompt_embeds,
@@ -1346,21 +1329,7 @@ class ControlNetSpotLightZeroCompPipeline(
                     mid_block_additional_residual=mid_block_res_sample,
                     added_cond_kwargs=added_cond_kwargs,
                     return_dict=False,
-                    return_attention_maps=return_attention_maps,
-                    batch_3_shadow=batch_3_shadow,
-                    batch_3_shadow_config=batch_3_shadow_config,
-                    batch_3_shadow_data={**batch_3_shadow_data, "timestep": t.item(), "model": "unet"} if batch_3_shadow_data else dict(),
-                )
-                if return_attention_maps:
-                    noise_pred, attention_maps = output
-                    # TODO: cleaner
-                    if t == 299:
-                        all_attention_maps.append({
-                            'timestep': t,
-                            'attention_maps': attention_maps
-                        })
-                else:
-                    noise_pred, = output
+                )[0]
 
                 # perform guidance
                 if self.do_classifier_free_guidance:
@@ -1451,9 +1420,6 @@ class ControlNetSpotLightZeroCompPipeline(
         self.maybe_free_model_hooks()
 
         if not return_dict:
-            if return_attention_maps:
-                return (image, has_nsfw_concept, all_attention_maps)
-            else:
-                return (image, has_nsfw_concept)
+            return (image, has_nsfw_concept)
 
-        return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=has_nsfw_concept, attention_maps=all_attention_maps)
+        return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=has_nsfw_concept)

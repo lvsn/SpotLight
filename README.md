@@ -11,21 +11,35 @@
 
 ## Overview
 
-TODO
+SpotLight allows precise local lighting control by specifying the desired shadows of the inserted object. This approach accurately reshades the object and properly harmonizes the object with the target background, without any training.
+
+In this repository, we provide the code for SpotLight applied to two _diffusion renderers_, that is, diffusion models trained to render realistic images conditioned on 2D intrinsic maps (e.g. normals, albedo, shading, etc.) :
+- ZeroComp (Zhang et al., 2025). See the code in `src/zerocomp`.
+- RGB↔X (Zeng et al., 2024). See the code in `src/spotlight`.
+
+## Pre-requisites
+
+- Blender 4: Make sure you have Blender 4 installed on your machine and in the PATH of your machine, in order to be able to generate shadows. You can check by running `blender --version`.
 
 ## Quick Start
 
-First, clone the repository and load all the data.
+First, clone the repository, all its submodules and load all the data.
 
 ```bash
-git clone git@github.com:lvsn/SpotLight.git
+git clone --recursive git@github.com:lvsn/SpotLight.git
 cd SpotLight
 ```
 
 Then, you can install the dependencies using and run the project in a virtual environment using this:
 
 ```bash
-pip install -r requirements.txt
+python -m venv venv # create virtual environment
+# activate on Windows:
+venv\Scripts\activate
+# activate on Linux/Mac:
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+pip install -r src/zerocomp/requirements.txt
+python src/zerocomp/main_render_control_dataset.py
 ```
 
 Alternatively, if you want to run the project inside a Docker container, you can do so using the following command.

@@ -19,12 +19,10 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
-from tools3d import spharm
 import itertools
 import skimage.morphology
 from skimage.transform import resize
 import random
-from pyshtools import _SHTOOLS
 from datetime import datetime
 import struct
 import cv2
@@ -272,31 +270,6 @@ def scale_hdr(hdr, mode='test'):
 
     return scale
 
-
-def surface_points_to_sh_coeffs(normals, values):
-    assert normals.shape[1] == 3
-    assert values.shape[0] == normals.shape[0]
-    assert len(values.shape) == 1
-
-    lat_deg = np.rad2deg(np.arcsin(normals[:, 1]))
-    long_deg = -np.rad2deg(np.arctan2(normals[:, 0], normals[:, 2]))
-    out = _SHTOOLS.SHExpandLSQ(
-        d=values, lat=lat_deg, lon=long_deg, lmax=1, norm=4
-    )
-    coeffs = out[1]
-    return coeffs
-
-def sh_coeffs_to_xyz(coeffs):
-    return (
-        coeffs[1, 1, 1], # x
-        coeffs[0, 1, 0], # y
-        coeffs[0, 1, 1] # z
-    )
-
-def surface_points_to_sh_xyz(normals, values):
-    return sh_coeffs_to_xyz(surface_points_to_sh_coeffs(normals, values))
-
-
 def cutout_sphere(depth, *, min_distance, max_distance, fov=60):
     point_cloud = depth_map_to_point_cloud(depth, fov=fov) # TODO: validate FOV
     mask_center = (random.randint(0, depth.shape[0]-1), random.randint(0, depth.shape[1]-1))
@@ -339,82 +312,6 @@ def cutout_sphere(depth, *, fov, min_distance, max_distance, min_minkowski_dista
     mask_image = np.sum(np.abs(sphere_center - transformed_point_cloud) ** minkowski_distance, axis=2) ** (1/minkowski_distance) < 1.0
 
     return mask_image
-
-
-def extract_sh(image, raw_normals, normals, mask, diffuse, *, normalize_direction):
-    # masks
-    valid_diffuse_mask = skimage.morphology.binary_erosion(np.all(diffuse > 1e-3, axis=2))
-    # valid_normals_mask = np.any(raw_normals != 0, axis=2) # remove windows, where normals are set to (0, 0, 0)
-    sh_estimation_mask = mask & valid_diffuse_mask # & valid_normals_mask
-    # print('shapes', mask.shape, valid_diffuse_mask.shape, valid_normals_mask.shape, sh_estimation_mask.shape)
-    print('sh_estimation_mask', sh_estimation_mask.shape, sh_estimation_mask.sum())
-    sh_estimation_mask_indices = np.where(sh_estimation_mask)
-
-    # Compute shading
-    luminance_constants = np.array([0.2126, 0.7152, 0.0722])[np.newaxis, np.newaxis, :]
-    approx_grayscale_shading = np.sum(image / np.clip(diffuse, 1e-5, None) * luminance_constants, axis=2)
-    
-    # generate vector to fit SH
-    normals = normals[sh_estimation_mask_indices]
-    values = approx_grayscale_shading[sh_estimation_mask_indices]
-    # fit SH
-    lat_deg = np.rad2deg(np.arcsin(normals[:, 1]))
-    long_deg = -np.rad2deg(np.arctan2(normals[:, 0], normals[:, 2]))
-    sh_coefficients = _SHTOOLS.SHExpandLSQ(
-        d=values, lat=lat_deg, lon=long_deg, lmax=1, norm=4
-    )[1]
-    if len(values) < 10:
-        print('No valid values for SH fitting')
-        return sh_coefficients, np.array([0,0,0])
-    
-    if np.all(sh_coefficients == 0):
-        # print shape, min max mean of lat, long and values
-        print('Error fitting SH')
-        print(lat_deg.shape, long_deg.shape, values.shape)
-        print(lat_deg.min(), lat_deg.max(), lat_deg.mean())
-        print(long_deg.min(), long_deg.max(), long_deg.mean())
-        print(values.min(), values.max(), values.mean())
-        # also print subset of ten
-        print(lat_deg[:10])
-        print(long_deg[:10])
-        print(values[:10])
-    
-
-
-    dominant_light = np.array([
-        -sh_coefficients[1, 1, 1], # x
-        sh_coefficients[0, 1, 0], # y
-        sh_coefficients[0, 1, 1] # z
-    ])
-    # normalize
-    print('norm', np.linalg.norm(dominant_light))
-    if normalize_direction:
-        dominant_light = dominant_light / np.clip(np.linalg.norm(dominant_light), 1e-6, None)
-    else:
-        if np.linalg.norm(dominant_light) > 1000:
-            print('Error fitting SH, too big value ', np.linalg.norm(dominant_light))
-            return sh_coefficients, np.array([0,0,0])
-        dominant_light = dominant_light / 10.0
-    return sh_coefficients, dominant_light
-
-def reshade_dataset_sample(sample_torch):
-    # convert sample (torch) to numpy
-    sample = {k: sdi_utils.tensor_to_numpy(v) for k, v in sample_torch.items() if isinstance(v, torch.Tensor) and k in ['hdr_image', 'normal', 'diffuse', 'mask']}
-    sample['sh_coefficients'] = sample_torch['sh_coefficients'][0].cpu().numpy()
-
-    estimated_lambertian_shading_gray, _ = approx_grayscale_lambertian_shading(sample['hdr_image'], sample['diffuse'], handle_missing_diffuse_channels=False)
-    max_l = 1
-    reflected_spharm = spharm.SphericalHarmonic(envmap.EnvironmentMap(np.zeros((*ENV_DIM, estimated_lambertian_shading_gray.shape[2])), 'latlong').data, norm=4, max_l=max_l)
-    reflected_spharm.coeffs = [sample['sh_coefficients']]
-
-    # reflected_spharm = spharm.SphericalHarmonic(reflected_envmap.data, max_l=max_l)
-    reconstructed = reflected_spharm.reconstruct(height=ENV_DIM[0], max_l=max_l, clamp_negative=False)
-    reconstructed = envmap.EnvironmentMap(reconstructed, 'latlong')
-    # print('end SH')
-
-    reshaded = reshade(estimated_lambertian_shading_gray, sample['normal'] * 2 - 1, reconstructed, mask=sample['mask'])
-    reshaded = np.clip(reshaded, 0, 1.0)
-    return reshaded
 
 def camera_to_image_space(light_xyz, *, x_fov):
     focal_length = 1/np.tan(np.deg2rad(x_fov)/2)
@@ -471,179 +368,6 @@ def write_text_to_image(image, text, color=(255, 0, 0)):
 
 ENV_DIM = (50, 100)
 DOWNSAMPLE_FACTOR = 2.5
-
-
-def main():
-    print('Running...')
-    # save light direction envmap
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-
-    dummy_envmap = envmap.EnvironmentMap(np.zeros((*ENV_DIM, 3)), 'latlong')
-    world_coordinates = dummy_envmap.worldCoordinates()
-    world_coordinates = (world_coordinates[0], world_coordinates[1], world_coordinates[2])
-
-    # glob into Image dir
-    if os.getenv('CC_CLUSTER'):
-        pattern = r'Image/([^/]+)/im_(\d+)\.hdr$'
-    else:
-        pattern = r'^OpenRooms/Image/main_xml/([^/]+)/im_(\d+)\.hdr$'
-    paths = glob.glob(f'{IMAGE_DIR}/*/im_*.hdr')
-    random.shuffle(paths)
-
-    for path in paths:
-        print(f'Processing {path}')
-        path = path.replace('\\', '/')
-        m = re.search(pattern, path)
-        scene_name, k = m.groups()
-
-        image = cv2.imread(path, -1)[:, :, ::-1]
-        new_shape = (int(image.shape[0] / DOWNSAMPLE_FACTOR), int(image.shape[1] / DOWNSAMPLE_FACTOR))
-        #image = resize(image, new_shape, anti_aliasing=True)
-
-        normals_path = f'{GEOMETRY_DIR}/{scene_name}/imnormal_{k}.png'
-        if not os.path.exists(normals_path):
-            # print(f'Normals file not found: {normals_path}')
-            continue
-
-        raw_normals = cv2.imread(normals_path)[:, :, ::-1]
-        # remove windows, where normals are set to (0, 0, 0)
-        valid_normals_mask = np.all(raw_normals != 0, axis=2)
-        #normals = resize(np.array(normals), new_shape, anti_aliasing=True)
-        normals = raw_normals.astype(np.float32) / 127.5 - 1
-        normals = normals / np.maximum(
-            np.sqrt(np.sum(normals * normals, axis=2, keepdims=True)),
-            1e-6
-        )
-
-
-        depth_path = f'{GEOMETRY_DIR}/{scene_name}/imdepth_{k}.dat'
-        with open(depth_path, 'rb') as fIn:
-            # Read the height and width of depth
-            hBuffer = fIn.read(4)
-            height = struct.unpack('i', hBuffer)[0]
-            wBuffer = fIn.read(4)
-            width = struct.unpack('i', wBuffer)[0]
-            # Read depth
-            dBuffer = fIn.read(4 * width * height)
-            depth = np.array(
-                struct.unpack('f' * height * width, dBuffer),
-                dtype=np.float32)
-            depth = depth.reshape(height, width)
-
-        point_cloud = depth_map_to_point_cloud(depth, fov=60) # TODO: validate FOV
-        print(point_cloud.shape)
-        
-
-        diffuse_path = f'{MATERIAL_DIR}/{scene_name}/imbaseColor_{k}.png'
-        if not os.path.exists(diffuse_path):
-            # print(f'Diffuse file not found: {diffuse_path}')
-            continue
-        diffuse = cv2.imread(diffuse_path)[:, :, ::-1]
-        #diffuse = resize(np.array(diffuse), new_shape, anti_aliasing=True)
-        diffuse = diffuse.astype(np.float32) / 255
-        diffuse = diffuse ** 2.2
-                
-        print(f'Processing {scene_name}_{k}')
-
-        # AS DONE IN ZITIAN'S CODE
-        scale = scale_hdr(image,'test')
-        # image = self.scale_hdr_reinhard(hdr_image)
-        image = image * scale
-        # image = np.clip(image, 0, 1.0)
-        
-
-        estimated_lambertian_shading_gray, _ = approx_grayscale_lambertian_shading(image, diffuse, handle_missing_diffuse_channels=False)
-        # estimated_lambertian_shading_gray_smart, valid_diffuse_mask = approx_grayscale_lambertian_shading(image, diffuse, handle_missing_diffuse_channels=True)
-        # valid_diffuse_mask = skimage.morphology.binary_erosion(valid_diffuse_mask)
-
-        # for m_idx, mask_range in enumerate(MASK_RANGES):
-        for m_idx, mask_config in enumerate(MASK_CONFIGS):
-            
-            # mask_center = int(image.shape[0] * 0.5), int(image.shape[1] * 0.5)
-            # random mask center
-            # mask_center = (random.randint(0, image.shape[0]), random.randint(0, image.shape[1]))
-            # sphere_center = point_cloud[mask_center[0], mask_center[1]]
-            # sphere_radius = 0.5
-            # mask_image = np.linalg.norm(point_cloud - sphere_center, axis=2) < sphere_radius
-            
-            #  mask_image = cutout_sphere(depth, fov=60, min_distance=0.7, max_distance=1.3, min_minkowski_distance=0.8, max_minkowski_distance=2.5, rotate_points=True, anisotropic=True, mask_center_border_pixels=0)
-            mask_image = cutout_sphere(depth, min_distance=0.7, max_distance=1.3, fov=60)
-            sh_coefficients, dominant_light = extract_sh(image, raw_normals, normals, mask_image, diffuse)
-            max_l = 1
-            reflected_spharm = spharm.SphericalHarmonic(envmap.EnvironmentMap(np.zeros((*ENV_DIM, estimated_lambertian_shading_gray.shape[2])), 'latlong').data, norm=4, max_l=max_l)
-            reflected_spharm.coeffs = [sh_coefficients]
-
-            # reflected_spharm = spharm.SphericalHarmonic(reflected_envmap.data, max_l=max_l)
-            reconstructed = reflected_spharm.reconstruct(height=ENV_DIM[0], max_l=max_l, clamp_negative=False)
-            reconstructed = envmap.EnvironmentMap(reconstructed, 'latlong')
-            # print('end SH')
-
-            reshaded = reshade(estimated_lambertian_shading_gray, normals, reconstructed, mask=mask_image)
-
-            # reinhard
-            # disp
-            fig, axs = plt.subplots(2, 4, figsize=(26,13))
-            disp_img = np.clip(image ** (1/2.2), 0, 1)
-            disp_img = emphasize_masked_region(disp_img, mask_image, method='contour')
-            axs[0, 0].imshow(disp_img)
-            axs[0, 0].set_title('Input Image')
-            axs[0, 0].axis('off')
-
-            # axs[0, 1].imshow(reinhard(estimated_lambertian_shading), vmin=0.0, vmax=1.0)
-            # axs[0, 1].set_title('Estimated Lambertian Shading')
-            # axs[0, 1].axis('off')
-
-            axs[0, 1].imshow(reinhard(estimated_lambertian_shading_gray), cmap='gray', vmin=0.0, vmax=1.0)
-            axs[0, 1].set_title('Shading (image/albedo)')
-            axs[0, 1].axis('off')
-
-            axs[0, 2].imshow(reinhard(reshaded), cmap='gray', vmin=0.0, vmax=1.0)
-            axs[0, 2].set_title('Reshaded with local SH')
-            axs[0, 2].axis('off')
-
-            axs[0, 3].axis('off')
-            # axs[0, 4].imshow(valid_diffuse_mask, cmap='gray', vmin=0.0, vmax=1.0)
-            # axs[0, 4].set_title('Diffuse validity mask')
-            # axs[0, 4].axis('off')
-# 
-            axs[1, 0].imshow(reconstructed.data, cmap='gray', vmin=np.min(reconstructed.data), vmax=np.max(reconstructed.data))
-            axs[1, 0].set_title('Reconstructed Environment Map')
-            axs[1, 0].axis('off')
-
-
-            # skylibs_pos = dumb_get_light_source_from_envmap(reflected_envmap)
-            # blender_pos = skylibs_to_blender_xyz(skylibs_pos)
-            # image_with_light_direction = draw_light_direction_on_image(np.ones((500, 500, 3)) *0.5, blender_pos, 0)
-# 
-            axs[1, 1].imshow(mask_image, cmap='gray', vmin=0.0, vmax=1.0)
-            axs[1, 1].set_title('Mask')
-            axs[1, 1].axis('off')
-
-
-            # skylibs_pos = dumb_get_light_source_from_envmap(reconstructed)
-            # blender_pos = skylibs_to_blender_xyz(skylibs_pos)
-            # image_with_light_direction = draw_light_direction_on_image(np.ones((500, 500, 3)) *0.5, blender_pos, 0)
-# 
-            axs[1, 2].imshow(raw_normals)
-            axs[1, 2].set_title('Normals')
-            axs[1, 2].axis('off')
-
-            azimuth = np.arctan2(dominant_light[0], dominant_light[2]) # shadow azimuth
-            #azimuth = np.arctan2(skylibs_pos[2], skylibs_pos[0]) # shadow azimuth
-            image_with_light_direction = draw_light_direction_on_image_azimuth(np.ones((500, 500, 3)) *0.5, azimuth)
-
-            axs[1, 3].imshow(image_with_light_direction)
-            axs[1, 3].set_title('Light Direction (SH coeffs)')
-            axs[1, 3].axis('off')
-
-            print('d')
-            plt.tight_layout()
-
-            print('saving')
-            plt.savefig(f'{OUTPUT_DIR}/{scene_name}_{k}_{m_idx}_lambertian_shading.png')
-            plt.close()
-            print('done')
 
 
 

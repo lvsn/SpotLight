@@ -3,7 +3,6 @@ from typing import Any, Tuple, Union
 from PIL import Image
 from omegaconf import OmegaConf
 # from albumentations.augmentations.dropout import Cutout, CoarseDropout
-from coarse_dropout import CoarseDropout
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -78,8 +77,8 @@ def match_depth_from_footprint(background_depth, object_depth, object_footprint_
 
 
 def handle_zoedepth():
-    from zoedepth.utils.config import get_config
-    from zoedepth.models.builder import build_model
+    from predictors.zoedepth.utils.config import get_config
+    from predictors.zoedepth.models.builder import build_model
 
     # ZoeD_NK
     torch.hub.set_dir('.cache')
@@ -95,7 +94,7 @@ def handle_zoedepth():
 
 
 def handle_omnidata_depth():
-    from OmniData.modules.midas.dpt_depth import DPTDepthModel
+    from predictors.OmniData.modules.midas.dpt_depth import DPTDepthModel
 
     image_size = 384
     pretrained_weights_path = '.cache/checkpoints/omnidata_dpt_depth_v2.ckpt'  # 'omnidata_dpt_depth_v1.ckpt'
@@ -117,7 +116,7 @@ def handle_omnidata_depth():
 
 
 def handle_omnidata_normal():
-    from OmniData.modules.midas.dpt_depth import DPTDepthModel
+    from predictors.OmniData.modules.midas.dpt_depth import DPTDepthModel
 
     image_size = 384
 
@@ -140,7 +139,7 @@ def handle_omnidata_normal():
 
 
 def handle_gmnet():
-    from gmnet.gmnet_v1_5 import GMNet
+    from predictors.gmnet.gmnet_v1_5 import GMNet
     gmnet = GMNet()
     gmnet = sdi_utils.load_model_from_checkpoint(gmnet, '.cache/checkpoints/gmnet_100.pt')
     gmnet.eval()
@@ -149,7 +148,7 @@ def handle_gmnet():
 
 
 def handle_dfnet():
-    from OmniData.modules.midas.dpt_depth import DPTDepthModel
+    from predictors.OmniData.modules.midas.dpt_depth import DPTDepthModel
     model = DPTDepthModel(backbone='vitb_rn50_384', num_channels=3)  # DPT Hybrid
     # Load pretrained backbone
     model.load_state_dict(torch.load('.cache/checkpoints/dfnet.bin'))
@@ -159,7 +158,7 @@ def handle_dfnet():
 
 
 def handle_dfnet_w_depth_normal():
-    from OmniData.modules.midas.dpt_depth import DPTDepthModel
+    from predictors.OmniData.modules.midas.dpt_depth import DPTDepthModel
     from timm.layers.std_conv import StdConv2dSame
     model = DPTDepthModel(backbone='vitb_rn50_384', num_channels=3)  # DPT Hybrid
 
@@ -178,7 +177,7 @@ def handle_dfnet_w_depth_normal():
 
 
 def handle_depth_anything():
-    from DepthAnything import get_config, build_model
+    from predictors.DepthAnything import get_config, build_model
 
     overwrite = {"pretrained_resource": "local::./.cache/checkpoints/depth_anything_metric_depth_indoor.pt"}
     config = get_config('zoedepth', "eval", 'nyu', **overwrite)
@@ -191,7 +190,7 @@ def handle_depth_anything():
 
 
 def handle_depth_anything_v2_relative():
-    from DepthAnythingV2.depth_anything_v2.dpt import DepthAnythingV2
+    from predictors.DepthAnythingV2.depth_anything_v2.dpt import DepthAnythingV2
 
     model_configs = {
         'vits': {'encoder': 'vits', 'features': 64, 'out_channels': [48, 96, 192, 384]},
@@ -211,7 +210,7 @@ def handle_depth_anything_v2_relative():
 
 
 def handle_depth_anything_v2_metric():
-    from DepthAnythingV2.metric_depth.depth_anything_v2.dpt import DepthAnythingV2
+    from predictors.DepthAnythingV2.metric_depth.depth_anything_v2.dpt import DepthAnythingV2
 
     model_configs = {
         'vits': {'encoder': 'vits', 'features': 64, 'out_channels': [48, 96, 192, 384]},
@@ -232,9 +231,9 @@ def handle_depth_anything_v2_metric():
 
 
 def handle_stable_normal(device):
-    from stablenormal.scheduler.heuristics_ddimsampler import HEURI_DDIMScheduler
-    from stablenormal.pipeline_stablenormal import StableNormalPipeline
-    from stablenormal.pipeline_yoso_normal import YOSONormalsPipeline
+    from predictors.stablenormal.scheduler.heuristics_ddimsampler import HEURI_DDIMScheduler
+    from predictors.stablenormal.pipeline_stablenormal import StableNormalPipeline
+    from predictors.stablenormal.pipeline_yoso_normal import YOSONormalsPipeline
 
     default_seed = 2024
     default_batch_size = 1
@@ -300,60 +299,6 @@ def approx_grayscale_lambertian_shading(image, diffuse, *, handle_missing_diffus
 
     return approx_grayscale_shading, any_valid_mask
 
-# def get_dominant_light_from_sh(*, image, diffuse, normals, mask):
-#     assert len(image.shape) == 3
-#     assert len(diffuse.shape) == 3
-#     assert len(normals.shape) == 3
-#     assert len(mask.shape) == 3
-#     assert mask.shape[:2] == image.shape[:2]
-# 
-#     mask = mask[..., 0]
-#     ENV_DIM = (50, 100)
-# 
-#     normals = normals * 2 - 1
-#     print('normals', normals.shape, normals.dtype, normals.min(), normals.max())
-# 
-#     estimated_lambertian_shading_gray_smart, any_valid_mask = approx_grayscale_lambertian_shading(image, diffuse, handle_missing_diffuse_channels=True)
-# 
-#     any_valid_mask = skimage.morphology.binary_erosion(any_valid_mask)
-#     estimated_lambertian_shading_gray_smart = estimated_lambertian_shading_gray_smart * any_valid_mask[..., None]
-# 
-#    # print('estimated_lambertian_shading_gray_smart', estimated_lambertian_shading_gray_smart.shape, estimated_lambertian_shading_gray_smart.dtype, estimated_lambertian_shading_gray_smart.min(), estimated_lambertian_shading_gray_smart.max())
-#    # print('any_valid_mask', any_valid_mask.shape, any_valid_mask.dtype, any_valid_mask.min(), any_valid_mask.max())
-#    
-#     final_mask = mask & any_valid_mask
-#     
-#     curr_mask_indices = np.where(final_mask)
-#     curr_values = estimated_lambertian_shading_gray_smart[curr_mask_indices] # TODO: use smart shading
-#    # print('curr_values', curr_values.shape, curr_values.min(), curr_values.max())
-#     curr_normals = normals[curr_mask_indices]
-#     # 
-#     # print('curr_normals[0]', curr_normals[:, 0].min(), curr_normals[:, 0].max(), curr_normals[:, 0].mean())
-#     # print('curr_normals[1]', curr_normals[:, 1].min(), curr_normals[:, 1].max(), curr_normals[:, 1].mean())
-#     # print('curr_normals[2]', curr_normals[:, 2].min(), curr_normals[:, 2].max(), curr_normals[:, 2].mean())
-#     # print('curr_normals', curr_normals.shape)
-#     curr_lat_deg = np.rad2deg(np.arcsin(curr_normals[:, 1]))
-#     curr_long_deg = np.rad2deg(np.arctan2(curr_normals[:, 0], curr_normals[:, 2]))
-#    #print('curr_lat_deg', curr_lat_deg.shape, curr_lat_deg.min(), curr_lat_deg.max())
-#    #print('curr_long_deg', curr_long_deg.shape, curr_long_deg.min(), curr_long_deg.max())
-#     max_l = 1
-#     out = _SHTOOLS.SHExpandLSQ(
-#         d=curr_values, lat=curr_lat_deg, lon=curr_long_deg, lmax=max_l, norm=4
-#     )
-# 
-#     reflected_spharm = spharm.SphericalHarmonic(envmap.EnvironmentMap(np.zeros((*ENV_DIM, estimated_lambertian_shading_gray_smart.shape[2])), 'latlong').data, norm=4, max_l=max_l)
-#     reflected_spharm.coeffs = [out[1]]
-#     
-#     skylibs_pos = reflected_spharm.coeffs[0]
-#     skylibs_pos = (
-#         -coeffs[1, 1, 1], # x
-#         coeffs[0, 1, 0], # y
-#         coeffs[0, 1, 1] # z
-#     )
-# 
-#     out = torch.tensor([skylibs_pos[0], 0.0, skylibs_pos[2]], dtype=torch.float32)
-#     out = out / torch.norm(out)
-#     return out
 
 def copy_make_border(input, top, bottom, left, right, value):
     """

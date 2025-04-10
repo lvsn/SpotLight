@@ -19,7 +19,10 @@ dataset_dir: data/rendered_2024-10-20_19-07-58_control
 background_estimated_intrinsics_dir: data/WACV_bg_estimates # TODO: better naming
 background_mesh_dir: data/GT_emission_envmap_depthanythingv2_relative_obj
 objects_dir: data/objects
+shadows_dir: data/shadows
 pretrained_model_name_or_path: stabilityai/stable-diffusion-2-1
+
+shadow_generation_debug_mode: true # warning: debug mode usually slows quite a bit the transfer time.
 
 aug:
   fill_value: -1

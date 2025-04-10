@@ -39,7 +39,10 @@ venv\Scripts\activate
 # activate on Linux/Mac:
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 pip install -r src/zerocomp/requirements.txt
-python src/zerocomp/main_render_control_dataset.py
+
+python src/zerocomp/main_generate_shadows.py # optional, you can use pre-computed shadows
+
+python src/zerocomp/main_run_spotlight.py
 ```
 
 Alternatively, if you want to run the project inside a Docker container, you can do so using the following command.

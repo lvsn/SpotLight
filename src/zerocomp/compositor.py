@@ -500,16 +500,16 @@ def run_inference(conditioning, dst_batch, pipeline, args, bg_image_for_balance,
     return current_images[0]
 
 
-def _render_numpy_shadow(scene_name, shadow_map_name, light_position_blender, dataset_dir, results_dir, *, background_mesh_dir, objects_dir, light_distance, light_radius=0.0, hide_object=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL):
+def _render_numpy_shadow(scene_name, shadow_map_name, light_position_blender, dataset_dir, scene_dir, *, background_mesh_dir, objects_dir, light_distance, light_radius=0.0, hide_object=False, debug_mode=False):
     # Set up the environment variables for the subprocess
-    debug_mode = True # warning: turning this on usually slows quite a bit the transfer time.
+    # warning: debug mode usually slows quite a bit the transfer time.
 
     new_env = os.environ.copy()
     new_env['DEBUG'] = '1' if debug_mode else '0'
     new_env['SCENE_NAME'] = scene_name
     new_env['SHADOW_MAP_NAME'] = shadow_map_name
     new_env['DATASET_DIR'] = dataset_dir
-    new_env['OUTPUT_DIR'] = os.path.join(results_dir)
+    new_env['OUTPUT_DIR'] = scene_dir
     new_env['BACKGROUND_MESH_DIR'] = background_mesh_dir
     new_env['OBJECTS_DIR'] = objects_dir
     new_env['LIGHT_X'] = str(light_position_blender[0] * light_distance)
@@ -519,10 +519,13 @@ def _render_numpy_shadow(scene_name, shadow_map_name, light_position_blender, da
     new_env['HIDE_OBJECT'] = str(hide_object)
     
     # Run the Blender process to generate the shadow map
-    subprocess.run(['blender','--background', '--python', 'src/blender/shadow_map_generation.py'], env=new_env)
+    if debug_mode:
+        subprocess.run(['blender','--background', '--python', 'src/blender/shadow_map_generation.py'], env=new_env)
+    else:
+        subprocess.run(['blender','--background', '--python', 'src/blender/shadow_map_generation.py'], env=new_env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # Check if the shadow map was generated
-    shadow_map_path = os.path.join(results_dir, f'ShadowMap_{shadow_map_name}_0001.exr')
+    shadow_map_path = os.path.join(scene_dir, f'ShadowMap_{shadow_map_name}_0001.exr')
     if not os.path.exists(shadow_map_path):
         raise FileNotFoundError(f"Shadow map not found at {shadow_map_path}")
 
@@ -535,14 +538,14 @@ def _render_numpy_shadow(scene_name, shadow_map_name, light_position_blender, da
 
     return output
 
-def render_numpy_shadow(scene_name, shadow_map_name, light_position_blender, dataset_dir, results_dir, *, background_mesh_dir, objects_dir, light_distance, light_radius=0.0, render_engine='BLENDER_EVEE', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL):
+def render_numpy_shadow(scene_name, shadow_map_name, light_position_blender, dataset_dir, scene_dir, *, background_mesh_dir, objects_dir, light_distance, light_radius=0.0, render_engine='BLENDER_EVEE', debug_mode=False):
     if render_engine == 'BLENDER_EVEE':
-        render_with_object = _render_numpy_shadow(scene_name, f'{shadow_map_name}_a', light_position_blender, dataset_dir, results_dir, light_distance=light_distance, background_mesh_dir=background_mesh_dir, objects_dir=objects_dir, light_radius=light_radius, hide_object=False, stdout=stdout, stderr=stderr)[:, :, 0:1]
-        render_without_object = _render_numpy_shadow(scene_name, f'{shadow_map_name}_b', light_position_blender, dataset_dir, results_dir, light_distance=light_distance, background_mesh_dir=background_mesh_dir, objects_dir=objects_dir, light_radius=light_radius, hide_object=True, stdout=stdout, stderr=stderr)[:, :, 0:1]
+        render_with_object = _render_numpy_shadow(scene_name, f'{shadow_map_name}_a', light_position_blender, dataset_dir, scene_dir, light_distance=light_distance, background_mesh_dir=background_mesh_dir, objects_dir=objects_dir, light_radius=light_radius, hide_object=False, debug_mode=debug_mode)[:, :, 0:1]
+        render_without_object = _render_numpy_shadow(scene_name, f'{shadow_map_name}_b', light_position_blender, dataset_dir, scene_dir, light_distance=light_distance, background_mesh_dir=background_mesh_dir, objects_dir=objects_dir, light_radius=light_radius, hide_object=True, debug_mode=debug_mode)[:, :, 0:1]
         shadow_gain = render_with_object / (render_without_object + 1e-6)
         shadow_alpha = 1 - shadow_gain
     elif render_engine == 'CYCLES':
-        shadow_alpha = _render_numpy_shadow(scene_name, shadow_map_name, light_position_blender, dataset_dir, results_dir, background_mesh_dir=background_mesh_dir, objects_dir=objects_dir, light_distance=light_distance, light_radius=light_radius, hide_object=False, stdout=stdout, stderr=stderr)[:, :, 0:1]
+        shadow_alpha = _render_numpy_shadow(scene_name, shadow_map_name, light_position_blender, dataset_dir, scene_dir, background_mesh_dir=background_mesh_dir, objects_dir=objects_dir, light_distance=light_distance, light_radius=light_radius, hide_object=False, debug_mode=debug_mode)[:, :, 0:1]
 
     return shadow_alpha
 

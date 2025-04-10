@@ -16,7 +16,9 @@ feed_empty_prompt: true
 
 conditioning_maps: ['depth', 'normal', 'diffuse', 'mask', 'shading']
 dataset_dir: data/rendered_2024-10-20_19-07-58_control
-bg_estimates_dir: data/WACV_bg_estimates
+background_estimated_intrinsics_dir: data/WACV_bg_estimates # TODO: better naming
+background_mesh_dir: data/GT_emission_envmap_depthanythingv2_relative_obj
+objects_dir: data/objects
 pretrained_model_name_or_path: stabilityai/stable-diffusion-2-1
 
 aug:

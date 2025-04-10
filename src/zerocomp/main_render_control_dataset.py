@@ -7,24 +7,15 @@ import logging
 from PIL import Image
 import PIL.Image
 from tqdm.auto import tqdm
-from transformers import AutoTokenizer, PretrainedConfig
+from transformers import AutoTokenizer
 from datetime import datetime
-from diffusers.utils.torch_utils import randn_tensor
 import re
-
 from diffusers import (
     ControlNetModel,
     DDIMScheduler,
 )
 from pipeline_controlnet_spotlight_zc import ControlNetSpotLightZeroCompPipeline
-from diffusers.optimization import get_scheduler
-from diffusers.utils import check_min_version, is_wandb_available
-from diffusers.utils.import_utils import is_xformers_available
-
-from controlnet_input_handle import ToControlNetInput, ToPredictors, collate_fn, match_depth_from_footprint
-# from models.controlnet import ControlNetModel
-# from pipeline_controlnet import StableDiffusionControlNetPipeline
-
+from controlnet_input_handle import ToControlNetInput, ToPredictors
 import sdi_utils
 import hydra
 from tempfile import TemporaryDirectory
@@ -33,38 +24,11 @@ import json
 import compositor
 from omegaconf import OmegaConf
 import PIL.Image
-# hydra.output_subdir = None  # Prevent hydra from changing the working directory
-# hydra.job.chdir = False  # Prevent hydra from changing the working directory
 
 EPS = 1e-6
 
-# Will error if the minimal version of diffusers is not installed. Remove at your own risks.
-check_min_version("0.22.0.dev0")
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
-
-def get_shadow_mask(directory, batch_idx, *, shadow_opacity_threshold=0.2):
-    pred_path_with_shadow = os.path.join(directory, f'batch{int(batch_idx):05}_frame00000_pred_seed_1.png')
-    pred_path_no_shadow = os.path.join(directory, f'batch{int(batch_idx) + 1:05}_frame00000_pred_seed_1.png')
-    mask_path_with_shadow = os.path.join(directory, f'batch{int(batch_idx):05}_frame00000_comp_mask.png')
-    mask_path_no_shadow = os.path.join(directory, f'batch{int(batch_idx) + 1:05}_frame00000_comp_mask.png')
-    
-    pred_with_shadow = np.array(PIL.Image.open(pred_path_with_shadow)) / 255.0
-    pred_no_shadow = np.array(PIL.Image.open(pred_path_no_shadow)) / 255.0
-
-    mask_with_shadow = np.array(PIL.Image.open(mask_path_with_shadow)) / 255.0
-    mask_no_shadow = np.array(PIL.Image.open(mask_path_no_shadow)) / 255.0
-    possible_shadow = (1-mask_with_shadow) * mask_no_shadow
-    # to luminance
-    pred_with_shadow = np.dot(pred_with_shadow[...,:3], [0.2989, 0.5870, 0.1140])
-    pred_no_shadow = np.dot(pred_no_shadow[...,:3], [0.2989, 0.5870, 0.1140])
-
-    # shadow_mask = possible_shadow * np.clip(pred_with_shadow / np.clip(pred_no_shadow, 1e-6, 1.0), 0, 1) < (1 - shadow_opacity_threshold)
-    shadow_mask = possible_shadow * ((pred_with_shadow / np.clip(pred_no_shadow, 1e-6, 1.0)) < (1 - shadow_opacity_threshold))
-    return shadow_mask
-
 
 @hydra.main(config_path="../../configs", config_name="default", version_base='1.1')
 def main(args):
@@ -332,7 +296,8 @@ def main(args):
                     elif args.dataset_name == 'scribbles':
                         shadow_custom = batch[f'positive_shadow_{frame_dict["shadow_map_idx"]}'] * (1 - batch['mask'])
                     else:
-                        shadow_custom = compositor.render_numpy_shadow(scene_name, shadow_map_name, frame_dict['blender_light_xyz_position_object_space'], args.dataset_dir, results_dir, light_distance=args.eval.light_distance, light_radius=args.eval.light_radius)
+                        shadow_custom = compositor.render_numpy_shadow(scene_name, shadow_map_name, frame_dict['blender_light_xyz_position_object_space'], args.dataset_dir, results_dir, background_mesh_dir=args.background_mesh_dir, objects_dir=args.objects_dir, 
+                                                                       light_distance=args.eval.light_distance, light_radius=args.eval.light_radius)
                         shadow_custom = sdi_utils.numpy_to_tensor(shadow_custom).to(dtype=batch['mask'].dtype).to(batch['mask'].device) * (1 - batch['mask'])
 
                     print('done')
@@ -347,7 +312,8 @@ def main(args):
                             -frame_dict['blender_light_xyz_position_object_space'][1],
                             frame_dict['blender_light_xyz_position_object_space'][2]
                         ]
-                        shadow_opposite = compositor.render_numpy_shadow(scene_name, shadow_map_name, blender_light_xyz_position_object_space_opposite, args.dataset_dir, results_dir, light_distance=args.eval.light_distance, light_radius=args.eval.light_radius)
+                        shadow_opposite = compositor.render_numpy_shadow(scene_name, shadow_map_name, blender_light_xyz_position_object_space_opposite, args.dataset_dir, results_dir, background_mesh_dir=args.background_mesh_dir, objects_dir=args.objects_dir,
+                                                                         light_distance=args.eval.light_distance, light_radius=args.eval.light_radius)
                         shadow_opposite = sdi_utils.numpy_to_tensor(shadow_opposite).to(dtype=batch['mask'].dtype).to(batch['mask'].device) * (1 - batch['mask'])
 
                         conditioning_negative, _, _, _, negative_image_logs, negative_shading_mask = compositor.composite_batch(

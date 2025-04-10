@@ -4,66 +4,32 @@ import numpy as np
 import cv2
 import open3d as o3d
 import sdi_utils
-import logging
 import os
-
-import comet_ml
-import accelerate
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
-import transformers
 from torch.utils.data import DataLoader, Subset
-from accelerate import Accelerator
-# from accelerate.logging import get_logger
-import logging
 from packaging import version
-from PIL import Image
-import PIL.Image
 from torchvision.transforms import v2
 from torchvision.ops import masks_to_boxes
-from tqdm.auto import tqdm
-from transformers import AutoTokenizer, PretrainedConfig, CLIPTextModel
-from torchvision.utils import make_grid
+from transformers import CLIPTextModel
 import cv2
 from diffusers.utils.torch_utils import randn_tensor
 from diffusers import (
     AutoencoderKL,
-    AsymmetricAutoencoderKL,
     ControlNetModel,
-    DDPMScheduler,
-    DDIMScheduler,
     UNet2DConditionModel,
 )
-from diffusers.optimization import get_scheduler
-from diffusers.utils import check_min_version, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
 from data.dataset_render import RenderDataset
 from data.dataset_real_world import RealWorldDataset
-from controlnet_input_handle import ToControlNetInput, ToPredictors, collate_fn, match_depth_from_footprint
-# from train_controlnet import import_model_class_from_model_name_or_path
+from controlnet_input_handle import collate_fn, match_depth_from_footprint
 import kornia.morphology
-# from models.controlnet import ControlNetModel
-# from pipeline_controlnet import StableDiffusionControlNetPipeline
-
 import sdi_utils
-import itertools
-import hydra
-from hydra.core.hydra_config import HydraConfig
 import open3d as o3d
 import subprocess
-from tempfile import TemporaryDirectory
-from typing import Literal
-from PIL import ImageDraw
-import shutil
-import sh_light_utils
-import pickle
-import json
-from typing import Optional, Dict, Any
 from controlnet_input_handle import compute_shading
 import ezexr
-from torchvision.transforms import Resize
 
 def recursive_info(data):
     if isinstance(data, dict):
@@ -120,9 +86,9 @@ def create_dataloader(args, to_controlnet_input, start_batch=0, shuffle=False):
     ])
     
     if args.dataset_name == 'render':
-        val_dataset = RenderDataset(args.dataset_dir, args.bg_estimates_dir, transforms=val_transforms, to_controlnet_input=to_controlnet_input, force_metallic_value=args.eval.force_metallic_value, force_roughness_value=args.eval.force_roughness_value, force_albedo_value=args.eval.force_albedo_value)
+        val_dataset = RenderDataset(args.dataset_dir, args.background_estimated_intrinsics_dir, transforms=val_transforms, to_controlnet_input=to_controlnet_input, force_metallic_value=args.eval.force_metallic_value, force_roughness_value=args.eval.force_roughness_value, force_albedo_value=args.eval.force_albedo_value)
     elif args.dataset_name == 'scribbles':
-        val_dataset = RenderDataset(args.dataset_dir, args.bg_estimates_dir, transforms=val_transforms, to_controlnet_input=to_controlnet_input, scribbles_dir=args.scribbles_dir, force_metallic_value=args.eval.force_metallic_value, force_roughness_value=args.eval.force_roughness_value, force_albedo_value=args.eval.force_albedo_value)
+        val_dataset = RenderDataset(args.dataset_dir, args.background_estimated_intrinsics_dir, transforms=val_transforms, to_controlnet_input=to_controlnet_input, scribbles_dir=args.scribbles_dir, force_metallic_value=args.eval.force_metallic_value, force_roughness_value=args.eval.force_roughness_value, force_albedo_value=args.eval.force_albedo_value)
     elif args.dataset_name == 'real_world':
         val_dataset = RealWorldDataset(args.dataset_dir, transforms=val_transforms, to_controlnet_input=to_controlnet_input, dataset_subfolder=args.dataset_subfolder,
                                        shadow_channel=args.eval.shadow_channel)
@@ -534,9 +500,9 @@ def run_inference(conditioning, dst_batch, pipeline, args, bg_image_for_balance,
     return current_images[0]
 
 
-def _render_numpy_shadow(scene_name, shadow_map_name, light_position_blender, dataset_dir, results_dir, *, light_distance, light_radius=0.0, hide_object=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL):
+def _render_numpy_shadow(scene_name, shadow_map_name, light_position_blender, dataset_dir, results_dir, *, background_mesh_dir, objects_dir, light_distance, light_radius=0.0, hide_object=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL):
     # Set up the environment variables for the subprocess
-    debug_mode = False # warning: turning this on usually slows quite a bit the transfer time.
+    debug_mode = True # warning: turning this on usually slows quite a bit the transfer time.
 
     new_env = os.environ.copy()
     new_env['DEBUG'] = '1' if debug_mode else '0'
@@ -544,6 +510,8 @@ def _render_numpy_shadow(scene_name, shadow_map_name, light_position_blender, da
     new_env['SHADOW_MAP_NAME'] = shadow_map_name
     new_env['DATASET_DIR'] = dataset_dir
     new_env['OUTPUT_DIR'] = os.path.join(results_dir)
+    new_env['BACKGROUND_MESH_DIR'] = background_mesh_dir
+    new_env['OBJECTS_DIR'] = objects_dir
     new_env['LIGHT_X'] = str(light_position_blender[0] * light_distance)
     new_env['LIGHT_Y'] = str(light_position_blender[1] * light_distance)
     new_env['LIGHT_Z'] = str(light_position_blender[2] * light_distance)
@@ -551,7 +519,7 @@ def _render_numpy_shadow(scene_name, shadow_map_name, light_position_blender, da
     new_env['HIDE_OBJECT'] = str(hide_object)
     
     # Run the Blender process to generate the shadow map
-    subprocess.run(['blender','--background', '--python', 'shadowmap/shadow_map_generation.py'], env=new_env, stdout=stdout, stderr=stderr)
+    subprocess.run(['blender','--background', '--python', 'src/blender/shadow_map_generation.py'], env=new_env)
 
     # Check if the shadow map was generated
     shadow_map_path = os.path.join(results_dir, f'ShadowMap_{shadow_map_name}_0001.exr')
@@ -567,14 +535,14 @@ def _render_numpy_shadow(scene_name, shadow_map_name, light_position_blender, da
 
     return output
 
-def render_numpy_shadow(scene_name, shadow_map_name, light_position_blender, dataset_dir, results_dir, *, light_distance, light_radius=0.0, render_engine='BLENDER_EVEE', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL):
+def render_numpy_shadow(scene_name, shadow_map_name, light_position_blender, dataset_dir, results_dir, *, background_mesh_dir, objects_dir, light_distance, light_radius=0.0, render_engine='BLENDER_EVEE', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL):
     if render_engine == 'BLENDER_EVEE':
-        render_with_object = _render_numpy_shadow(scene_name, f'{shadow_map_name}_a', light_position_blender, dataset_dir, results_dir, light_distance=light_distance, light_radius=light_radius, hide_object=False, stdout=stdout, stderr=stderr)[:, :, 0:1]
-        render_without_object = _render_numpy_shadow(scene_name, f'{shadow_map_name}_b', light_position_blender, dataset_dir, results_dir, light_distance=light_distance, light_radius=light_radius, hide_object=True, stdout=stdout, stderr=stderr)[:, :, 0:1]
+        render_with_object = _render_numpy_shadow(scene_name, f'{shadow_map_name}_a', light_position_blender, dataset_dir, results_dir, light_distance=light_distance, background_mesh_dir=background_mesh_dir, objects_dir=objects_dir, light_radius=light_radius, hide_object=False, stdout=stdout, stderr=stderr)[:, :, 0:1]
+        render_without_object = _render_numpy_shadow(scene_name, f'{shadow_map_name}_b', light_position_blender, dataset_dir, results_dir, light_distance=light_distance, background_mesh_dir=background_mesh_dir, objects_dir=objects_dir, light_radius=light_radius, hide_object=True, stdout=stdout, stderr=stderr)[:, :, 0:1]
         shadow_gain = render_with_object / (render_without_object + 1e-6)
         shadow_alpha = 1 - shadow_gain
     elif render_engine == 'CYCLES':
-        shadow_alpha = _render_numpy_shadow(scene_name, shadow_map_name, light_position_blender, dataset_dir, results_dir, light_distance=light_distance, light_radius=light_radius, hide_object=False, stdout=stdout, stderr=stderr)[:, :, 0:1]
+        shadow_alpha = _render_numpy_shadow(scene_name, shadow_map_name, light_position_blender, dataset_dir, results_dir, background_mesh_dir=background_mesh_dir, objects_dir=objects_dir, light_distance=light_distance, light_radius=light_radius, hide_object=False, stdout=stdout, stderr=stderr)[:, :, 0:1]
 
     return shadow_alpha
 

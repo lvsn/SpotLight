@@ -18,8 +18,8 @@ DEBUG = os.getenv('DEBUG', '0') == "1"
 COMPUTE_DEVICE_TYPE = 'OPTIX'
 NUM_SAMPLES_CYCLES = 4096
 DEPTH_MODEL_NAME = 'depthanythingv2_relative_matched'
-BGMESH_DIR = os.path.join(os.getenv('SCRATCH'), 'GT_emission_envmap_depthanythingv2_relative_obj')
-OBJECTS_DIR = os.path.join(os.getenv('SCRATCH'), 'objects_out')
+BACKGROUND_MESH_DIR = os.getenv('BACKGROUND_MESH_DIR')
+OBJECTS_DIR = os.getenv('OBJECTS_DIR')
 
 RENDER_ENGINE = os.getenv('RENDER_ENGINE', 'BLENDER_EEVEE') # BLENDER_EEVEE or CYCLES
 
@@ -170,7 +170,7 @@ def render_scene(name, shadow_map_name, blender_dto_path, output_dir, light_posi
 
 
     # name = '9C4A1774-12d053d172_06_crop_B07QFB1TMP'
-    bg_mesh_path = os.path.join(BGMESH_DIR, name, 'obj', f'{name}_{DEPTH_MODEL_NAME}.obj')
+    bg_mesh_path = os.path.join(BACKGROUND_MESH_DIR, name, 'obj', f'{name}_{DEPTH_MODEL_NAME}.obj')
     # output_dir = os.path.join(OUTPUT_MAIN_DIR, name, 'shadowmap')
     # output_scene_dir = os.path.join(OUTPUT_SCENE_DIR, name, 'shadowmap')
     # os.makedirs(output_dir, exist_ok=True)

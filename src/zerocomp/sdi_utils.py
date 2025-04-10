@@ -11,18 +11,6 @@ except:
     print("Open3D not installed \n")
 
 
-# def get_conditioning_channels(conditioning_maps):
-#     if conditioning_maps is None:
-#         raise ValueError("conditioning_maps is None")
-#     num_conditioning_channels = 0
-#     for key in conditioning_maps:
-#         if key == 'normal' or key == 'diffuse' or key == 'shading':
-#             num_conditioning_channels += 3
-#         elif key == 'depth' or key == 'mask' or key == 'roughness' or key == 'metallic':
-#             num_conditioning_channels += 1
-#     return num_conditioning_channels
-
-
 def compute_distance_bgpc_objpc(bgpc, objpc):
     # Create Open3D PointCloud objects
     bg_cloud = o3d.geometry.PointCloud()
@@ -89,13 +77,6 @@ def depth_map_to_point_cloud_with_rgb(depth_map, rgb_image, fov):
     return point_cloud_rgb
 
 
-def color_rebalance(out_image, bg_image):
-    bg_avg_color = torch.mean(bg_image, dim=(2, 3), keepdim=True)
-    out_avg_color = torch.mean(out_image, dim=(2, 3), keepdim=True)
-    ratio = (bg_avg_color / out_avg_color)
-    return ratio
-
-
 def comp_normal_to_openrooms_normal(nm):
     new_nm = nm.copy()
     # Input normal map should be in [-1, 1] range
@@ -106,17 +87,6 @@ def comp_normal_to_openrooms_normal(nm):
     new_nm = new_nm * 0.5 + 0.5
     return new_nm.clip(0, 1)
 
-# 
-# def comp_normal_to_openrooms_normal_tensor(nm):
-#     new_nm = nm.clone()
-#     # Input normal map should be in [-1, 1] range
-#     if new_nm.min() >= 0:
-#         new_nm = new_nm * 2 - 1
-#     new_nm[:, 2, :, :] = -new_nm[:, 2, :, :]
-#     # Transform it back to [0, 1] range
-#     new_nm = new_nm * 0.5 + 0.5
-#     return new_nm.clip(0, 1)
-# 
 
 def omnidata_normal_to_openrooms_normal(normal):
     # Input normal map should be in [-1, 1] range
@@ -163,15 +133,6 @@ def log_image_to_disk(image, path):
     image = np.clip(image, 0, 1)
     image = (image * 255).astype(np.uint8)
     skimage.io.imsave(path, image)
-
-
-# def tensor_to_numpy(img, initial_range=(0, 1)):
-#     # scale to [0, 1]
-#     img = img - initial_range[0]
-#     img = img / (initial_range[1] - initial_range[0])
-#     if img.dim() == 4:
-#         img = img.squeeze(0)
-#     return np.clip(img.permute(1, 2, 0).detach().cpu().numpy(), 0, 1)
 
 def tensor_to_numpy(img, initial_range=(0, 1), clip=False):
     # scale to [0, 1]

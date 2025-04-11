@@ -22,7 +22,7 @@ objects_dir: data/objects
 shadows_dir: data/shadows
 pretrained_model_name_or_path: stabilityai/stable-diffusion-2-1
 
-shadow_generation_debug_mode: true # warning: debug mode usually slows quite a bit the transfer time.
+shadow_generation_debug_mode: false # warning: debug mode usually slows quite a bit the transfer time.
 
 aug:
   fill_value: -1

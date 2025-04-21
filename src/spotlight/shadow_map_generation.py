@@ -1,10 +1,3 @@
-import os
-import json
-import math
-
-from tqdm import tqdm
-import numpy as np
-
 try:
     import bpy
     import bmesh
@@ -12,6 +5,25 @@ try:
 except ImportError:
     print("This script must be run from Blender")
     quit()
+
+assert bpy.app.version < (4, 2, 0), "Version 4.2.0 and above are not supported. Please install a previous version of Blender."
+
+import os
+import json
+import math
+import sys
+import subprocess
+
+try:
+    import numpy as np
+except ImportError:
+    try:
+        subprocess.run([sys.executable, '-m', 'pip', 'install', 'numpy', '--quiet'], check=True)
+        import numpy as np
+    except subprocess.CalledProcessError as e:
+        print(e.output)
+        sys.exit(1)
+
 
 
 DEBUG = os.getenv('DEBUG', '0') == "1"

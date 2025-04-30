@@ -1,0 +1,12 @@
+--input_dir=data/rendered_2024-10-20_19-07-58_control
+--shadows_dir=data/shadows
+--output_dir=outputs_rgbx
+--drop_aovs=irradiance
+--seed=469
+--inference_steps=50
+--num_samples=1
+--relighting_guidance_scale=3.0
+--latent_mask_weight=0.05
+--intensity_rescale=2.0
+--use_inpaint_model
+--use_rectangular_mask

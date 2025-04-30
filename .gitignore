@@ -1,6 +1,6 @@
 data
 checkpoints
-outputs
+outputs*
 venv
 **/__pycache__
 .cache

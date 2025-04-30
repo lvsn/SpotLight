@@ -41,12 +41,21 @@ venv\Scripts\activate
 # activate on Linux/Mac:
 pip install torch torchvision xformers --index-url https://download.pytorch.org/whl/cu126
 pip install -r src/zerocomp/requirements.txt
-
-
+```
+(Optional): Estimate the background geometry and cast shadows. Note that these are already pre-computed.
+```bash
 python src/spotlight/estimate_background_meshes.py
-python src/spotlight/main_generate_shadows.py # optional, you can use pre-computed shadows
+python src/spotlight/main_generate_shadows.py
+```
+Run SpotLight (with ZeroComp backbone)
 
-python src/zerocomp/main_run_spotlight.py
+```bash
+python src/zerocomp/main_run_spotlight.py --config-name default
+```
+Run SpotLight (with RGB↔X backbone)
+```bash
+pip install -r src/rgbx/requirements.txt # RGB↔X has different requirements
+python src/rgbx/main_object_insertion.py @configs/rgb_x_default.txt # TODO: rename script
 ```
 
 Alternatively, if you want to run the project inside a Docker container, you can do so using the following command.
@@ -111,7 +120,7 @@ series = {SIGGRAPH '24}
 ```
 
 ## License
-The codes, pretrained weights and test dataset are all for non-commercial use only.
+The codes, and datasets are all for non-commercial use only.
 
 <p xmlns:cc="http://creativecommons.org/ns#" xmlns:dct="http://purl.org/dc/terms/"><a property="dct:title"
         rel="cc:attributionURL" href="https://lvsn.github.io/spotlight/">ZeroComp: Zero-shot Object Compositing from

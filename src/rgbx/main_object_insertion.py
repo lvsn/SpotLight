@@ -4,7 +4,6 @@ import argparse
 import numpy as np
 from diffusers import DDIMScheduler
 from rgb2x.pipeline_rgb2x import StableDiffusionAOVMatEstPipeline
-from x2rgb.pipeline_x2rgb_mod import StableDiffusionAOVDropoutPipeline
 from x2rgb_inpainting.pipeline_x2rgb_inpainting import StableDiffusionAOVDropoutPipeline as StableDiffusionAOVDropoutPipelineInpainting
 import torchvision.transforms as T
 from PIL import Image
@@ -13,7 +12,7 @@ from kornia.morphology import dilation
 import torch.nn.functional as F
 import time
 # Import the image loading functions
-from x2rgb.load_image import load_exr_image, load_ldr_image
+from x2rgb_inpainting.load_image import load_exr_image, load_ldr_image
 import torch
 
 def mask_to_bbox_mask(mask):
@@ -45,15 +44,15 @@ def mask_to_bbox_mask(mask):
 
 def main():
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Process EXR files from RGB to X to RGB.')
+    parser = argparse.ArgumentParser(description='Process EXR files from RGB to X to RGB.', fromfile_prefix_chars='@')
     parser.add_argument('--input_dir', type=str, required=True, help='Input directory with EXR files.')
-    parser.add_argument('--shadow_comp_dir', type=str, required=True, help='Input ShadowComp directory.')
+    parser.add_argument('--shadows_dir', type=str, required=True, help='Input shadows directory.')
     parser.add_argument('--output_dir', type=str, default='output_rgb', help='Output directory to save reconstructed RGB images and intrinsic composites.')
     parser.add_argument('--drop_aovs', nargs='*', default=[], help='List of intrinsic maps to drop (e.g., --drop_aovs irradiance).')
     parser.add_argument('--seed', type=int, default=469, help='Random seed.')
     parser.add_argument('--inference_steps', type=int, default=50, help='Number of inference steps.')
     parser.add_argument('--num_samples', type=int, default=1, help='Number of samples to generate.')
-    parser.add_argument('--relighting_guidance_scale', type=float, default=3.0, help='ShadowComp relight guidance scale.')
+    parser.add_argument('--relighting_guidance_scale', type=float, default=3.0, help='SpotLight relight guidance scale.')
     parser.add_argument('--latent_mask_weight', type=float, default=0.05, help='Latent shadow composite weight.')
     parser.add_argument('--do_wb_x_rgb', action='store_true', help='do_wb_x_rgb.')
     parser.add_argument('--do_wb_rgb_x', action='store_true', help='do_wb_rgb_x.')
@@ -248,10 +247,10 @@ def process_light_direction(exr_path, x2rgb_pipe, output_dir, composited_intrins
 
     composite_name = os.path.basename(exr_path).replace('_bundle0001.exr', '')
 
-    positive_guidance_image = load_ldr_image(os.path.join(args.shadow_comp_dir, composite_name, 'intermediate', f'shadow_positive_composite_{light_direction}.png'))
-    negative_guidance_image = load_ldr_image(os.path.join(args.shadow_comp_dir, composite_name, 'intermediate', f'shadow_negative_composite_{light_direction}.png'))
-    positive_mask = load_ldr_image(os.path.join(args.shadow_comp_dir, composite_name, 'intermediate', f'shadow_positive_{light_direction}.png'))
-    negative_mask = load_ldr_image(os.path.join(args.shadow_comp_dir, composite_name, 'intermediate', f'shadow_negative_{light_direction}.png'))
+    positive_guidance_image = load_ldr_image(os.path.join(args.shadows_dir, composite_name, f'shadow_positive_composite_{light_direction}.png'))
+    negative_guidance_image = load_ldr_image(os.path.join(args.shadows_dir, composite_name, f'shadow_negative_composite_{light_direction}.png'))
+    positive_mask = load_ldr_image(os.path.join(args.shadows_dir, composite_name, f'shadow_positive_{light_direction}.png'))
+    negative_mask = load_ldr_image(os.path.join(args.shadows_dir, composite_name, f'shadow_negative_{light_direction}.png'))
 
     # Prepare parameters for x2rgb pipeline
     albedo_image = composited_intrinsics.get('albedo', None)

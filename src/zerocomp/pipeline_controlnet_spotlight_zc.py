@@ -1232,6 +1232,7 @@ class ControlNetSpotLightZeroCompPipeline(
         debug_decoded_timesteps = []
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
+                print('latents.min(), latents.max()', latents.min(), latents.max())
                 if relighting_guidance is not None:
                     images = []
                     for image_idx in range(len(relighting_guidance)):
@@ -1310,6 +1311,8 @@ class ControlNetSpotLightZeroCompPipeline(
                     timestep_cond=timestep_cond,
                     class_labels=class_labels,
                 )
+                print('mid_block_res_sample.isnan().any()', mid_block_res_sample.isnan().any())
+                print('down_block_res_samples[0].isnan().any()', down_block_res_samples[0].isnan().any())
 
                 if guess_mode and self.do_classifier_free_guidance:
                     # Infered ControlNet only for the conditional batch.
@@ -1330,6 +1333,7 @@ class ControlNetSpotLightZeroCompPipeline(
                     added_cond_kwargs=added_cond_kwargs,
                     return_dict=False,
                 )[0]
+                print('noise_pred.isnan().any()', noise_pred.isnan().any())
 
                 # perform guidance
                 if self.do_classifier_free_guidance:
@@ -1393,6 +1397,7 @@ class ControlNetSpotLightZeroCompPipeline(
                         step_idx = i // getattr(self.scheduler, "order", 1)
                         callback(step_idx, t, latents)
                 
+        print('2: latents.min(), latents.max()', latents.min(), latents.max())
         # If we do sequential model offloading, let's offload unet and controlnet
         # manually for max memory savings
         if hasattr(self, "final_offload_hook") and self.final_offload_hook is not None:
@@ -1401,10 +1406,14 @@ class ControlNetSpotLightZeroCompPipeline(
             torch.cuda.empty_cache()
 
         if not output_type == "latent":
-            image = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False, generator=generator)[
-                0
-            ]
+            # On somme machines, it seems that a conversion to float32 is needed to avoid NaNs
+            with torch.autocast('cuda', torch.float32):
+                image = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False, generator=generator)[
+                    0
+                ]
+            print('image.min(), image.max()', image.min(), image.max())
             image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
+            print('image.min(), image.max()', image.min(), image.max())
         else:
             image = latents
             has_nsfw_concept = None

@@ -8,11 +8,9 @@ import torch
 import torch.nn.functional as F
 from torchvision import transforms
 from torchvision.transforms import functional as tf
-import sdi_utils
+import src.zerocomp.sdi_utils as sdi_utils
 from safetensors.torch import load_model
 import hydra
-
-# from predictors.material_diffusion.iid.material_diffusion.iid import IntrinsicImageDiffusion
 
 import os
 import sys
@@ -77,8 +75,8 @@ def match_depth_from_footprint(background_depth, object_depth, object_footprint_
 
 
 def handle_zoedepth():
-    from predictors.zoedepth.utils.config import get_config
-    from predictors.zoedepth.models.builder import build_model
+    from src.zerocomp.predictors.zoedepth.utils.config import get_config
+    from src.zerocomp.predictors.zoedepth.models.builder import build_model
 
     # ZoeD_NK
     torch.hub.set_dir('.cache')
@@ -94,7 +92,7 @@ def handle_zoedepth():
 
 
 def handle_omnidata_depth():
-    from predictors.OmniData.modules.midas.dpt_depth import DPTDepthModel
+    from src.zerocomp.predictors.OmniData.modules.midas.dpt_depth import DPTDepthModel
 
     image_size = 384
     pretrained_weights_path = '.cache/checkpoints/omnidata_dpt_depth_v2.ckpt'  # 'omnidata_dpt_depth_v1.ckpt'
@@ -116,7 +114,7 @@ def handle_omnidata_depth():
 
 
 def handle_omnidata_normal():
-    from predictors.OmniData.modules.midas.dpt_depth import DPTDepthModel
+    from src.zerocomp.predictors.OmniData.modules.midas.dpt_depth import DPTDepthModel
 
     image_size = 384
 
@@ -139,7 +137,7 @@ def handle_omnidata_normal():
 
 
 def handle_gmnet():
-    from predictors.gmnet.gmnet_v1_5 import GMNet
+    from src.zerocomp.predictors.gmnet.gmnet_v1_5 import GMNet
     gmnet = GMNet()
     gmnet = sdi_utils.load_model_from_checkpoint(gmnet, '.cache/checkpoints/gmnet_100.pt')
     gmnet.eval()
@@ -148,7 +146,7 @@ def handle_gmnet():
 
 
 def handle_dfnet():
-    from predictors.OmniData.modules.midas.dpt_depth import DPTDepthModel
+    from src.zerocomp.predictors.OmniData.modules.midas.dpt_depth import DPTDepthModel
     model = DPTDepthModel(backbone='vitb_rn50_384', num_channels=3)  # DPT Hybrid
     # Load pretrained backbone
     model.load_state_dict(torch.load('.cache/checkpoints/dfnet.bin'))
@@ -158,7 +156,7 @@ def handle_dfnet():
 
 
 def handle_dfnet_w_depth_normal():
-    from predictors.OmniData.modules.midas.dpt_depth import DPTDepthModel
+    from src.zerocomp.predictors.OmniData.modules.midas.dpt_depth import DPTDepthModel
     from timm.layers.std_conv import StdConv2dSame
     model = DPTDepthModel(backbone='vitb_rn50_384', num_channels=3)  # DPT Hybrid
 
@@ -177,7 +175,7 @@ def handle_dfnet_w_depth_normal():
 
 
 def handle_depth_anything():
-    from predictors.DepthAnything import get_config, build_model
+    from src.zerocomp.predictors.DepthAnything import get_config, build_model
 
     overwrite = {"pretrained_resource": "local::./.cache/checkpoints/depth_anything_metric_depth_indoor.pt"}
     config = get_config('zoedepth', "eval", 'nyu', **overwrite)
@@ -190,7 +188,7 @@ def handle_depth_anything():
 
 
 def handle_depth_anything_v2_relative():
-    from predictors.DepthAnythingV2.depth_anything_v2.dpt import DepthAnythingV2
+    from src.zerocomp.predictors.DepthAnythingV2.depth_anything_v2.dpt import DepthAnythingV2
 
     model_configs = {
         'vits': {'encoder': 'vits', 'features': 64, 'out_channels': [48, 96, 192, 384]},
@@ -210,7 +208,7 @@ def handle_depth_anything_v2_relative():
 
 
 def handle_depth_anything_v2_metric():
-    from predictors.DepthAnythingV2.metric_depth.depth_anything_v2.dpt import DepthAnythingV2
+    from src.zerocomp.predictors.DepthAnythingV2.metric_depth.depth_anything_v2.dpt import DepthAnythingV2
 
     model_configs = {
         'vits': {'encoder': 'vits', 'features': 64, 'out_channels': [48, 96, 192, 384]},
@@ -231,9 +229,9 @@ def handle_depth_anything_v2_metric():
 
 
 def handle_stable_normal(device):
-    from predictors.stablenormal.scheduler.heuristics_ddimsampler import HEURI_DDIMScheduler
-    from predictors.stablenormal.pipeline_stablenormal import StableNormalPipeline
-    from predictors.stablenormal.pipeline_yoso_normal import YOSONormalsPipeline
+    from src.zerocomp.predictors.stablenormal.scheduler.heuristics_ddimsampler import HEURI_DDIMScheduler
+    from src.zerocomp.predictors.stablenormal.pipeline_stablenormal import StableNormalPipeline
+    from src.zerocomp.predictors.stablenormal.pipeline_yoso_normal import YOSONormalsPipeline
 
     default_seed = 2024
     default_batch_size = 1
@@ -781,36 +779,3 @@ def collate_fn(examples):
 
     return stacked_examples
 
-
-if __name__ == '__main__':
-    from transformers import AutoTokenizer
-    tokenizer = AutoTokenizer.from_pretrained(
-        'D:/repos/sd_intrinsics/.cache/huggingface/hub/models--stabilityai--stable-diffusion-2-1/snapshots/5cae40e6a2745ae2b01ad92ae5043f95f23644d6',
-        subfolder="tokenizer",
-        revision=None,
-        use_fast=False,
-    )
-
-    cutout = CoarseDropout(max_holes=3, max_height=0.7, max_width=0.7,
-                           min_holes=1, min_height=0.05, min_width=0.05,
-                           fill_value=-1, p=0.7, fully_drop_p=0.3,
-                           max_circles=3, min_circles=1, max_radius=0.3, min_radius=0.05, p_circle=0.7)
-
-    to_predictors = ToPredictors('cuda:0', True, cutout=cutout, predictor_names=['depthanything_v2_metric', 'omnidata', 'dfnet'])
-    # to_predictors = ToPredictorsOpenrooms('cuda:0', True, cutout=cutout)
-    # to_predictors = ToPredictorsWithoutEstimCutoutIntrinsics('cuda:0', True, cutout=cutout)
-
-    img1 = torch.from_numpy(np.array(Image.open("test/composite0001.jpg"), dtype=np.float32) / 255.0).permute(2, 0, 1).unsqueeze(0).to('cuda:0')
-    img2 = torch.from_numpy(np.array(Image.open("test/composite0002.jpg"), dtype=np.float32) / 255.0).permute(2, 0, 1).unsqueeze(0).to('cuda:0')
-    input = {'pixel_values': torch.cat([img1, img2], dim=0),
-             'input_ids': '',
-             'caption': ''}
-    out = to_predictors(input)
-    controlnet_inputs = out['controlnet_inputs']
-    for k, v in controlnet_inputs.items():
-        if k == 'depth':
-            v = sdi_utils.tensor_to_pil_list(v, [v.min(), v.max()])
-        else:
-            v = sdi_utils.tensor_to_pil_list(v)
-        for i, img in enumerate(v):
-            img.save(f'test/{k}_{i}.png')

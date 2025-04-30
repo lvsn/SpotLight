@@ -39,7 +39,7 @@ python -m venv venv # create virtual environment
 # activate on Windows:
 venv\Scripts\activate
 # activate on Linux/Mac:
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+pip install torch torchvision xformers --index-url https://download.pytorch.org/whl/cu126
 pip install -r src/zerocomp/requirements.txt
 
 
@@ -58,6 +58,11 @@ docker run -it --gpus all --mount type=bind,src=.,dst=/app ubuntu bash
 ## Acknowledgements
 
 This research was supported by NSERC grants RGPIN 2020-04799 and ALLRP 586543-23, Mitacs and Depix. Computing resources were provided by the Digital Research Alliance of Canada. The authors thank Zheng Zeng, Yannick Hold-Geoffroy and Justine Giroux for their help as well as all members of the lab for discussions and proofreading help.
+
+## Notes about non working versions
+
+For some reason, there are NaN outputs in the conv_in module when running pytorch with torch-2.6.0+cu126 and torch-2.7.0+cu128.
+With torch 2.7-cu118, the conv_in is fine, but the vae decoder has trouble
 
 ## Citing SpotLight
 

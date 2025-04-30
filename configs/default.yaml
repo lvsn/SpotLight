@@ -91,7 +91,7 @@ eval:
   infill_shadow: true
   
   generate_images_for_post_compositing: true
-  negative_sample_type: opposite_azimuth # opposite_azimuth, sh_auto, zerocomp
+  negative_sample_type: precomputed_shadow # other options: no_shadow, zerocomp
   shadow_opacity: 1.0
   latent_mask_weight: 0.05
   latent_mask_edge_boost: 2.0

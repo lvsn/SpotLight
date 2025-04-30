@@ -3,7 +3,6 @@ import torch
 import skimage.io
 import random
 from PIL import Image
-import skimage.transform
 import cv2
 try:
     import open3d as o3d

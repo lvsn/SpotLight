@@ -6,13 +6,13 @@ import cv2
 import ezexr
 import numpy as np
 
-import sdi_utils
+import zerocomp.sdi_utils as sdi_utils
 import glob
 
 default_save_dir = 'results_shadowmap'
 save_dir = default_save_dir
 # dataset_root = 'E:/repos/shadowcomp_eval/rendered_w_shadowmap'
-dataset_root = 'E:/repos/shadowcomp_eval/goodlooking_iccv'
+dataset_root = '.'
 
 
 def upload(input_image, input_exr_path):
@@ -35,6 +35,7 @@ def upload(input_image, input_exr_path):
 
 def save_shadowmap(input_obj_edit, input_obj_edit_negative):
     os.makedirs(save_dir, exist_ok=True)
+    print('Saving to ' + save_dir)
 
     if save_dir != default_save_dir:
         name_list = glob.glob(os.path.join(save_dir, '*_shadowmap_neg_*.png'))

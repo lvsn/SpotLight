@@ -6,12 +6,10 @@ import torch.nn.functional as F
 import logging
 from PIL import Image
 from tqdm import tqdm
-from transformers import AutoTokenizer
-import sdi_utils
+import zerocomp.sdi_utils as sdi_utils
 import hydra
-from controlnet_input_handle import ToControlNetInput
 import json
-import compositor
+import zerocomp.compositor as compositor
 from omegaconf import OmegaConf
 
 EPS = 1e-6
@@ -29,19 +27,7 @@ def main(args):
 
     sdi_utils.seed_all(args.seed)
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        args.pretrained_model_name_or_path,
-        subfolder="tokenizer",
-        revision=None,
-        use_fast=False,
-    )
-    to_controlnet_input = ToControlNetInput(
-        device=args.eval.device,
-        feed_empty_prompt=args.feed_empty_prompt,
-        tokenizer=tokenizer,
-        for_sdxl=False
-    )
-    val_dataloader = compositor.create_dataloader(args, to_controlnet_input, start_batch=args.eval.start_batch) # TODO: end batch too?
+    val_dataloader = compositor.create_dataloader(args, to_controlnet_input=None, start_batch=args.eval.start_batch) # TODO: end batch too?
 
     for batch_idx, batch in enumerate(tqdm(val_dataloader)):
         scene_name = batch['name'][0].replace('_bundle0001', '')

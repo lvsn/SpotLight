@@ -31,22 +31,7 @@ import subprocess
 from controlnet_input_handle import compute_shading
 import ezexr
 
-def recursive_info(data):
-    if isinstance(data, dict):
-        return {key: recursive_info(value) for key, value in data.items()}
-    elif isinstance(data, list):
-        return [recursive_info(item) for item in data]
-    elif isinstance(data, tuple):
-        return tuple(recursive_info(item) for item in data)
-    elif isinstance(data, torch.Tensor):
-        return {"type": "PyTorch Tensor", "shape": list(data.shape)}
-    elif isinstance(data, np.ndarray):
-        return {"type": "NumPy ndarray", "shape": list(data.shape)}
-    else:
-        return {"type": type(data).__name__, "value": data}
-
-
-def load_models(args, tokenizer):
+def load_models(args):
     text_encoder = CLIPTextModel.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="text_encoder", revision=None
     )
@@ -78,7 +63,7 @@ def load_models(args, tokenizer):
 
     return vae, unet, text_encoder, controlnet
 
-def create_dataloader(args, to_controlnet_input, start_batch=0, shuffle=False):
+def create_dataloader(args, *, to_controlnet_input=None, start_batch=0, shuffle=False):
     val_transforms = v2.Compose([
         v2.ToImage(),
         v2.Resize(size=[args.resolution, ], antialias=True),
@@ -86,9 +71,7 @@ def create_dataloader(args, to_controlnet_input, start_batch=0, shuffle=False):
     ])
     
     if args.dataset_name == 'render':
-        val_dataset = RenderDataset(args.dataset_dir, args.background_estimated_intrinsics_dir, transforms=val_transforms, to_controlnet_input=to_controlnet_input, force_metallic_value=args.eval.force_metallic_value, force_roughness_value=args.eval.force_roughness_value, force_albedo_value=args.eval.force_albedo_value)
-    elif args.dataset_name == 'scribbles':
-        val_dataset = RenderDataset(args.dataset_dir, args.background_estimated_intrinsics_dir, transforms=val_transforms, to_controlnet_input=to_controlnet_input, scribbles_dir=args.scribbles_dir, force_metallic_value=args.eval.force_metallic_value, force_roughness_value=args.eval.force_roughness_value, force_albedo_value=args.eval.force_albedo_value)
+        val_dataset = RenderDataset(args.dataset_dir, args.background_estimated_intrinsics_dir, transforms=val_transforms, to_controlnet_input=to_controlnet_input, shadows_dir=args.shadows_dir, force_metallic_value=args.eval.force_metallic_value, force_roughness_value=args.eval.force_roughness_value, force_albedo_value=args.eval.force_albedo_value)
     elif args.dataset_name == 'real_world':
         val_dataset = RealWorldDataset(args.dataset_dir, transforms=val_transforms, to_controlnet_input=to_controlnet_input, dataset_subfolder=args.dataset_subfolder,
                                        shadow_channel=args.eval.shadow_channel)

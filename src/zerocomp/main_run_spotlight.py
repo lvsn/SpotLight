@@ -157,8 +157,8 @@ def main(args):
 
                 if image_logs is not None and args.eval.output_zero_comp_intrinsics:
                     for k, image in image_logs[0].items():
-                        os.makedirs(os.path.join(results_dir, 'intrinsics'), exist_ok=True)
-                        intrinsic_png_path = os.path.join(results_dir, 'intrinsics', f"{scene_name}_{k}.png")
+                        os.makedirs(os.path.join(results_dir, scene_name, 'intrinsics'), exist_ok=True)
+                        intrinsic_png_path = os.path.join(results_dir, scene_name, 'intrinsics', f"{k}.png")
                         if type(image) == torch.Tensor:
                             sdi_utils.tensor_to_pil_list(image)[0].save(intrinsic_png_path)
                         elif type(image) == PIL.Image.Image:
@@ -229,7 +229,6 @@ def main(args):
 
                 all_frames = []
                 shadow_map_idx = 0
-                print(os.path.join(args.shadows_dir, scene_name, f'shadow_positive_{shadow_map_idx:04d}.png'))
                 while os.path.exists(os.path.join(args.shadows_dir, scene_name, f'shadow_positive_{shadow_map_idx:04d}.png')):
                     all_frames.append({
                         'name': f'frame_{shadow_map_idx}',
@@ -242,7 +241,6 @@ def main(args):
                         'shadow_map_idx': f'gt_dir'
                     })
 
-                print('len(all_frames)', len(all_frames))
                 for frame_idx, frame_dict in enumerate(all_frames):
                     # defaults
                     frame_name = frame_dict['name']

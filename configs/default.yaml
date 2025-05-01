@@ -62,7 +62,7 @@ eval:
   # predictor_names: [zoedepth, omnidata, dfnet]
   post_compositing: false
   # results_dir: ${oc.env:SCRATCH}/results/${now:%Y-%m-%d_%H-%M-%S}
-  results_dir: outputs
+  results_dir: outputs_zerocomp
   shading_maskout_pc_range_relative: 0.5 # TODO: validate value
   forced_shading_mask_mode: override # override or combine
   controlnet_model_name_or_path: checkpoints/zerocomp_openrooms/checkpoint-808000

@@ -58,10 +58,13 @@ pip install -r src/rgbx/requirements.txt # RGB↔X has different requirements
 python src/rgbx/main_object_insertion.py @configs/rgb_x_default.txt # TODO: rename script
 ```
 
-Alternatively, if you want to run the project inside a Docker container, you can do so using the following command.
+In order to improve the quality of the images, following ZeroComp, we perform a background preservation step, and a color rebalancing. We further found that ZeroComp often generates noisy images (due to being trained on noisy renders), we therefore use [OpenImageDenoise](https://www.openimagedenoise.org/index.html) in order to denoise the generated images. Make sure OpenImageDenoise is installed and in the system's PATH.
 
 ```bash
-docker run -it --gpus all --mount type=bind,src=.,dst=/app ubuntu bash
+# For ZeroComp backbone
+python src/post_processing/main_post_process.py --backbone zerocomp --raw_outputs_dir outputs_zerocomp/[Name of output directory] --post_processed_outputs_dir outputs_post_processed
+# For RGB↔X backbone
+python src/post_processing/main_post_process.py --backbone rgbx --raw_outputs_dir outputs_rgbx/[Name of output directory] --post_processed_outputs_dir outputs_post_processed
 ```
 
 ## Acknowledgements

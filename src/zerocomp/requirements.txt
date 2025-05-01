@@ -22,3 +22,4 @@ kornia
 skylibs
 diffusers==0.32.2
 gradio
+justpfm

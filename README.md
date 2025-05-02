@@ -23,29 +23,74 @@ In this repository, we provide the code for SpotLight applied to two _diffusion 
 - Python (tested on >= 3.10)
 - NVIDIA GPU
 
-## Quick Start
+## Running SpotLight
 
-First, clone the repository, all its submodules and load all the data.
+Here are the steps to run SpotLight on the test dataset.
+
+First, clone the repository and its submodules.
 
 ```bash
 git clone --recursive git@github.com:lvsn/SpotLight.git
 cd SpotLight
+export PYTHONPATH=$PWD:$PYTHONPATH
 ```
 
-Then, you can install the dependencies using and run the project in a virtual environment using this:
+Download all the required datasets and checkpoints:
+```bash
+# Data
+mkdir data && cd data
+wget https://hdrdb-public.s3.valeria.science/SpotLight/objects.zip                              # Amazon Berkeley Objects subset
+wget https://hdrdb-public.s3.valeria.science/SpotLight/WACV_bg_estimates.zip                    # Pre-computed background intrinsic estimates
+wget https://hdrdb-public.s3.valeria.science/SpotLight/rendered_2024-10-20_19-07-58_control.zip # Composite dataset
+
+# optional: those can be obtained by running the provided shadow generation code
+wget https://hdrdb-public.s3.valeria.science/SpotLight/shadows.zip                              # Pre-computed guiding shadows
+wget https://hdrdb-public.s3.valeria.science/SpotLight/bg_depth_depthanythingv2_relative.zip    # Pre-computed background meshes
+ 
+ # Unzips all
+for i in *.zip; do unzip "$i" -d "${i%.zip}"; done 
+cd ..
+
+# ZeroComp weights trained on OpenRooms
+mkdir checkpoints && cd checkpoints
+wget https://hdrdb-public.s3.valeria.science/zerocomp/openrooms_7days.zip
+unzip openrooms_7days.zip
+
+# Optional: ZeroComp weights trained on OpenRooms with inverted masks (for background relighting)
+wget https://hdrdb-public.s3.valeria.science/SpotLight/openrooms_2days_inverted_masks.zip
+unzip openrooms_2days_inverted_masks.zip
+
+# Optional: ZeroComp weights trained on InteriorVerse
+wget https://hdrdb-public.s3.valeria.science/zerocomp/interior_verse_2days.zip
+unzip interior_verse_2days.zip
+
+cd ..
+
+# Download depth estimators
+mkdir -p .cache/checkpoints && cd .cache/checkpoints
+wget https://huggingface.co/depth-anything/Depth-Anything-V2-Large/resolve/main/depth_anything_v2_vitl.pth?download=true
+wget https://hdrdb-public.s3.valeria.science/SpotLight/ZoeD_M12_NK.pt
+cd ..
+git clone https://github.com/isl-org/MiDaS.git intel-isl_MiDaS_master
+cd ..
+
+```
+
+Then, install the dependencies:
 
 ```bash
 python -m venv venv # create virtual environment
-# activate on Windows:
-venv\Scripts\activate
+# activate on Windows: venv\Scripts\activate
 # activate on Linux/Mac:
+source venv/bin/activate
+
 pip install torch torchvision xformers --index-url https://download.pytorch.org/whl/cu126
 pip install -r src/zerocomp/requirements.txt
 ```
 (Optional): Estimate the background geometry and cast shadows. Note that these are already pre-computed.
 ```bash
-python src/spotlight/estimate_background_meshes.py
-python src/spotlight/main_generate_shadows.py
+python src/spotlight/estimate_background_meshes.py   # already in data/bg_depth_depthanythingv2_relative
+python src/spotlight/main_generate_shadows.py        # already in data/shadows
 ```
 Run SpotLight (with ZeroComp backbone)
 
@@ -71,16 +116,11 @@ python src/post_processing/main_post_process.py --backbone rgbx --raw_outputs_di
 
 This research was supported by NSERC grants RGPIN 2020-04799 and ALLRP 586543-23, Mitacs and Depix. Computing resources were provided by the Digital Research Alliance of Canada. The authors thank Zheng Zeng, Yannick Hold-Geoffroy and Justine Giroux for their help as well as all members of the lab for discussions and proofreading help.
 
-## Notes about non working versions
-
-For some reason, there are NaN outputs in the conv_in module when running pytorch with torch-2.6.0+cu126 and torch-2.7.0+cu128.
-With torch 2.7-cu118, the conv_in is fine, but the vae decoder has trouble
-
 ## Citing SpotLight
 
 If you use this code, please cite SpotLight:
 ```bibtex
-@misc{fortierchouinard2025spotlightshadowguidedobjectrelighting,
+@misc{fortierchouinard2025spotlight,
       title={SpotLight: Shadow-Guided Object Relighting via Diffusion}, 
       author={Frédéric Fortier-Chouinard and Zitian Zhang and Louis-Etienne Messier and Mathieu Garon and Anand Bhattad and Jean-François Lalonde},
       year={2025},

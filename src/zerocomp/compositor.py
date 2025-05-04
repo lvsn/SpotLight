@@ -375,7 +375,7 @@ def composite_batch(batch, args, to_predictors,  EPS=1e-6, *, forced_shading_mas
 def run_inference(conditioning, dst_batch, pipeline, args, bg_image_for_balance, obj_mask, *, 
                 controlnet_conditioning_scale=1.0, guess_mode=False, guidance_scale=0.0,
                 latent_mask_weight=[0.005, 0.005],
-                seed=0, # could have used other seed, such as 469
+                seed=None, # could have used other seed, such as 469
                 num_inference_steps=20,
                 shadow_guidance_kernel_size = 16 * 2 + 1,
                 relighting_guidance=None, relighting_guidance_start_provided=False, shadow_guidances=None, shadow_composites=None, relighting_guidance_scale=0.0, relighting_guidance_mask=None,

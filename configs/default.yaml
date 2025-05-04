@@ -2,7 +2,7 @@ hydra:
   job:
     chdir: false
 
-seed: 0
+seed: 469
 batch_size: 1
 dataloader_num_workers: 4
 resolution: 512
@@ -65,8 +65,8 @@ eval:
   results_dir: outputs_zerocomp
   shading_maskout_pc_range_relative: 0.5 # TODO: validate value
   forced_shading_mask_mode: override # override or combine
-  controlnet_model_name_or_path: checkpoints/zerocomp_openrooms/checkpoint-808000
-  controlnet_model_name_or_path_inv: checkpoints/zerocomp_openrooms_inverted_masks/checkpoint-270000
+  controlnet_model_name_or_path: ../openrooms_wo_bg_eccv/checkpoints/checkpoint-808000
+  controlnet_model_name_or_path_inv: checkpoints/openrooms_2days_inverted_masks
 
   controlnet_conditioning_scale: 1.0
   guidance_scale: 0.0

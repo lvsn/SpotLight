@@ -42,11 +42,8 @@ class RealWorldDataset(Dataset):
     def __getitem__(self, idx):
         dst_comp_path = self.directory_files[idx]
         comp_folder = os.path.basename(os.path.dirname(dst_comp_path))
-        print('comp_folder', comp_folder)	
-
         bg_folder, bg_id = comp_folder.split('_')[0].split('-')
         obj_folder, obj_id = comp_folder.split('_')[1].split('-')
-        print('obj_folder', obj_folder)
         parts = os.path.basename(dst_comp_path).split('_')
         name = '_'.join(parts[:-1])
 
@@ -109,7 +106,6 @@ class RealWorldDataset(Dataset):
             'neg_shadow': neg_shadow,
             # 'final_ss': final_ss
         }
-        print(f'Loaded {name}')
 
         if self.transforms:
             sample = self.transforms(sample)

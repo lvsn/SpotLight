@@ -36,6 +36,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     crop_names = os.listdir(args.raw_outputs_dir)
+    crop_names.remove('config.yaml')
     for k, crop_name in enumerate(tqdm(crop_names)):
         image_names = ['0000', '0001', '0002', '0003', '0004', '0005', '0006', '0007', 'gt_dir']
         
@@ -53,9 +54,9 @@ if __name__ == '__main__':
             raise Exception(f'Unknown backbone {args.backbone}')
 
         for image_name in image_names:
-            def save_np(image):
-                png_path = os.path.join(args.post_processed_outputs_dir, args.backbone, 'png')
-                jpg_path = os.path.join(args.post_processed_outputs_dir, args.backbone, 'jpg')
+            def save_np(folder_name, image):
+                png_path = os.path.join(args.post_processed_outputs_dir, folder_name, 'png', crop_name)
+                jpg_path = os.path.join(args.post_processed_outputs_dir, folder_name, 'jpg', crop_name)
                 os.makedirs(png_path, exist_ok=True)
                 os.makedirs(jpg_path, exist_ok=True)
 
@@ -75,7 +76,6 @@ if __name__ == '__main__':
             else:
                 raise Exception(f'Unknown backbone {args.backbone}')
                 
-            pred_no_shadow_denoised = denoise_image(pred_no_shadow, composite_albedo, composite_normals)
 
             shadow_opacity = np.clip((srgb_to_intensity(pred)+1e-6) / (srgb_to_intensity(pred_no_shadow) + 1e-6), 0, 1)
                             
@@ -83,6 +83,7 @@ if __name__ == '__main__':
             post_comp_color_balanced = color_balance_factor * pred * mask[:,:,None] + background * (1 - mask[:,:,None]) * shadow_opacity[:,:,None]
             save_np(f'{args.backbone}_post_color_balanced', post_comp_color_balanced)
             
+            pred_no_shadow_denoised = denoise_image(pred_no_shadow, composite_albedo, composite_normals)
             pred_denoised = denoise_image(pred, composite_albedo, composite_normals)
             
             shadow_opacity_denoised = np.clip((srgb_to_intensity(pred_denoised)+1e-6) / (srgb_to_intensity(pred_no_shadow_denoised) + 1e-6), 0, 1)

@@ -14,8 +14,8 @@
 SpotLight allows precise local lighting control by specifying the desired shadows of the inserted object. This approach accurately reshades the object and properly harmonizes the object with the target background, without any training.
 
 In this repository, we provide the code for SpotLight applied to two _diffusion renderers_, that is, diffusion models trained to render realistic images conditioned on 2D intrinsic maps (e.g. normals, albedo, shading, etc.) :
-- ZeroComp (Zhang et al., 2025). See the code in `src/zerocomp`.
-- RGB↔X (Zeng et al., 2024). See the code in `src/rgbx`.
+- ZeroComp (Zhang et al., 2025). See the code in `src/zerocomp`. This is a modified version of https://github.com/lvsn/ZeroComp.
+- RGB↔X (Zeng et al., 2024). See the code in `src/rgbx`. This is a modified version of https://github.com/zheng95z/rgbx.
 
 ## Pre-requisites
 
@@ -163,11 +163,10 @@ series = {SIGGRAPH '24}
 ```
 
 ## License
-The codes, and datasets are all for non-commercial use only.
+The codes, weights and datasets are all for non-commercial use only.
 
 <p xmlns:cc="http://creativecommons.org/ns#" xmlns:dct="http://purl.org/dc/terms/"><a property="dct:title"
-        rel="cc:attributionURL" href="https://lvsn.github.io/spotlight/">ZeroComp: Zero-shot Object Compositing from
-        Image Intrinsics via Diffusion</a> by
+        rel="cc:attributionURL" href="https://lvsn.github.io/spotlight/">SpotLight: Shadow-Guided Object Relighting via Diffusion</a> by
     <a rel="cc:attributionURL dct:creator" property="cc:attributionName" href="https://lefreud.github.io/">Frédéric Fortier-Chouinard</a>, Zitian Zhang, Louis-Etienne Messier, Mathieu Garon, Anand Bhattad,
     Jean-François Lalonde is licensed under <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"
         target="_blank" rel="license noopener noreferrer" style="display:inline-block;">CC BY-NC-SA 4.0<img

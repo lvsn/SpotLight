@@ -116,7 +116,6 @@ class RenderDataset(Dataset):
                 shadow_negative_shadow_path = os.path.join(self.shadows_dir, name, f'shadow_negative_{shadow_map_idx:04d}.png')
                 sample[f'shadow_positive_{shadow_map_idx:04d}'] = load_image(shadow_positive_shadow_path, isGamma=False)[:,:,:1]
                 sample[f'shadow_negative_{shadow_map_idx:04d}'] = load_image(shadow_negative_shadow_path, isGamma=False)[:,:,:1]
-                print(f'shadow_positive_{shadow_map_idx:04d}')
                 shadow_map_idx += 1
             
             if os.path.exists(os.path.join(self.shadows_dir, name, f'shadow_positive_gt_dir.png')):
